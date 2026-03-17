@@ -4,19 +4,17 @@ An IoT and computer vision research prototype for intelligent building evacuatio
 
 This system is built to guide people to safety during emergencies by combining occupancy monitoring, shortest-path routing, real-time path availability, floor-level controllers, backup power awareness, and light-based evacuation guidance.
 
-## Why This Project Stands Out
+## Project Scope
 
-This is not just a sensor demo. It is a full smart-building safety concept that combines:
+This prototype combines several parts of a smart building evacuation system in one platform:
 
-- embedded systems
-- IoT messaging with MQTT
+- embedded controllers for floor-level sensing and actions
+- IoT communication through MQTT
 - edge devices across multiple floors
-- computer vision for occupancy detection
-- real-time evacuation logic
+- AI-assisted computer vision for occupancy detection
+- real-time evacuation routing logic
 - backend and app-based monitoring
-- infrastructure exposure through NGINX
-
-It reflects the kind of work used in real-world automation, safety systems, edge computing, and smart infrastructure platforms.
+- API exposure through `ngrok`
 
 ## What The Prototype Does
 
@@ -63,7 +61,7 @@ The wider system also includes:
 - a `Node.js` server as the main backend publisher and coordinator
 - a database layer for future or ongoing persistence work
 - an application interface for monitoring and command control
-- `NGINX` to expose backend API endpoints online for frontend access
+- `ngrok` to expose backend API endpoints online for frontend access
 
 ## Technologies Used
 
@@ -81,6 +79,7 @@ The wider system also includes:
 - `Python`
 - `OpenCV`
 - `Ultralytics YOLO`
+- AI-based people detection and occupancy monitoring
 - RTSP camera streaming
 - occupancy detection and floor-level monitoring
 
@@ -89,8 +88,15 @@ The wider system also includes:
 - `Node.js`
 - `MQTT`
 - REST API architecture
-- `NGINX`
+- `ngrok`
 - planned or in-progress database integration
+
+### AI Components
+
+- `YOLO` for person and occupancy detection
+- optional recognition workflow on `Raspberry Pi 5`
+- camera-based monitoring through RTSP streams
+- edge-assisted occupancy analysis for evacuation support
 
 ### Engineering Areas Demonstrated
 
@@ -150,7 +156,7 @@ An ESP32-based controller that:
 
 A Python-based occupancy and detection module that:
 
-- runs YOLO-based detection
+- runs YOLO-based people detection
 - tracks motion direction
 - estimates entering and exiting activity
 - supports floor occupancy awareness
@@ -168,16 +174,16 @@ It enables:
 - sensor and occupancy telemetry
 - coordination between ESP32, Raspberry Pi devices, and backend services
 
-## Example Engineering Value For Employers
+## Engineering Focus
 
-This project demonstrates experience in:
+This project involves:
 
-- building systems that combine hardware and software
-- designing real-time safety and automation logic
-- integrating embedded devices with backend infrastructure
-- working with edge AI and occupancy analytics
-- coordinating multi-floor device communication
-- preparing systems that can scale toward production-grade building monitoring
+- embedded programming
+- distributed device communication
+- real-time routing and control
+- safety-oriented system design
+- edge AI and occupancy monitoring
+- backend integration for monitoring and commands
 
 ## Getting Started
 
@@ -233,7 +239,7 @@ This prototype is part of a smart building research effort focused on:
 - occupancy-aware routing
 - resilient operation during power interruptions
 - intelligent route guidance using floor lights and controllers
-- practical integration of embedded systems, AI, and web infrastructure
+- practical integration of embedded systems, AI with YOLO, and web infrastructure
 
 ## Future Expansion
 
