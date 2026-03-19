@@ -1,306 +1,172 @@
-# TypeScript Node.js Template
+# Smart Building Backend
 
-A minimal TypeScript Node.js project template with Express.js, featuring hot-reload development, path aliases, and integrated linting.
+Node.js and TypeScript backend for the smart building evacuation prototype.
 
-## Features
+This service connects the application layer, MQTT broker, Firebase, and realtime control routes used during simulation and evacuation workflows.
 
-- TypeScript for type safety
-- Express.js v5 web framework
-- Hot reload with Nodemon
-- Path aliases (`@/` for `src/`)
-- Prettier for code formatting
-- ESLint for code quality and linting
-- Environment variable support with dotenv
+## What It Does
 
-## Prerequisites
+- subscribes to MQTT sensor, occupancy, elevator, and device-status topics
+- stores latest sensor and device state in Firebase Realtime Database
+- stores sensor event history in Firestore
+- exposes HTTP routes for evacuation commands, elevator state, and simulation reset
+- publishes MQTT commands and alerts for evacuation-related actions
 
-Before you begin, ensure you have the following installed:
+## Tech Stack
 
-- [Node.js](https://nodejs.org/) (v18 or higher recommended)
-- [npm](https://www.npmjs.com/) (comes with Node.js)
+- Node.js
+- TypeScript
+- Express
+- MQTT
+- Firebase Admin SDK
+- Redis
+- Socket.IO
+- Zod
+- Vitest
 
-### Important: Remove Global TypeScript
+## Project Structure
 
-If you have TypeScript installed globally, it may conflict with the local project version and cause unexpected behavior. Remove it before starting:
-
-```bash
-npm remove -g typescript
+```text
+app/backend/
+|-- config/                 # Environment loading, Firebase, Redis, logger, MQTT wrapper
+|-- src/
+|   |-- commands/           # Shared command types and topic constants
+|   |-- errors/             # App-specific error classes
+|   |-- helpers/            # MQTT handlers and persistence logic
+|   |-- middleware/         # Express middleware and async handler
+|   |-- routes/             # HTTP routes for simulation and controls
+|   |-- sensors_monitoring/ # MQTT wildcard topics for sensors
+|   |-- services/           # MQTT service
+|   |-- types/              # Shared payload and record types
+|   `-- server.ts           # Backend entry point
+|-- SensorTester/           # Simple sensor-publish helper sketch
+|-- package.json
+`-- README.md
 ```
 
-This ensures the project uses the TypeScript version specified in `package.json`, preventing version conflicts and build issues.
+## Environment Variables
 
-## Quick Start
+Create `.env.development` or `.env.production` in `app/backend/`.
 
-Use this template to create a new project instantly:
-
-```bash
-npx degit maliciousmuffins3/express-app new-project-name
-cd new-project-name
-npm install
-```
-
-## Getting Started
-
-### 1. Clone the Repository
-
-If you prefer to clone directly:
-
-```bash
-git clone https://github.com/maliciousmuffins3/express-app.git
-cd express-app
-```
-
-Or use the template (recommended):
-
-```bash
-npx degit maliciousmuffins3/express-app my-project
-cd my-project
-```
-
-### 2. Install Dependencies
-
-```bash
-npm install
-```
-
-### 3. Environment Configuration
-
-Create a `.env` file in the root directory (if not already present):
-
-```bash
-cp .env.example .env
-```
-
-Or create it manually with:
+Required values:
 
 ```env
 PORT=3000
+MQTT_URL=mqtt://localhost:1883
+REDIS_URL=redis://127.0.0.1:6379
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+FIREBASE_CLIENT_EMAIL=your-service-account@project.iam.gserviceaccount.com
+FIREBASE_DATABASE_URL=https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app/
 ```
 
-### 4. Run the Development Server
+Optional:
 
-Start the development server with hot reload:
+```env
+NODE_ENV=development
+ALLOWED_ORIGINS=http://localhost:5173
+MQTT_USERNAME=
+MQTT_PASSWORD=
+```
+
+## Run Locally
+
+Install dependencies:
+
+```bash
+cd app/backend
+npm install
+```
+
+Start development mode:
 
 ```bash
 npm run dev
 ```
 
-The server will start at `http://localhost:3000` (or the port specified in your `.env` file).
-
-### 5. Build for Production
-
-Compile TypeScript to JavaScript:
+Build:
 
 ```bash
 npm run build
 ```
 
-This will generate compiled JavaScript files in the `dist/` directory.
-
-### 6. Run Production Build
-
-After building, run the production server:
+Run production build:
 
 ```bash
 npm start
 ```
 
-## Available Scripts
+## Tests
 
-| Script             | Description                              |
-| ------------------ | ---------------------------------------- |
-| `npm run dev`      | Start development server with hot reload |
-| `npm run build`    | Compile TypeScript to JavaScript         |
-| `npm start`        | Run the production build                 |
-| `npm run lint`     | Lint code with ESLint                    |
-| `npm run lint:fix` | Lint and auto-fix issues                 |
-
-## Project Structure
-
-```
-ts-node-template/
-├── src/
-│   ├── config/
-│   │   └── index.ts       # Configuration management
-│   └── server.ts          # Express server entry point
-├── dist/                  # Compiled JavaScript (generated)
-├── node_modules/          # Dependencies
-├── .env                   # Environment variables (not tracked)
-├── .gitignore             # Git ignore rules
-├── .prettierrc            # Prettier configuration
-├── .prettierignore        # Prettier ignore rules
-├── eslint.config.mjs      # ESLint configuration
-├── nodemon.json           # Nodemon configuration
-├── package.json           # Project metadata and dependencies
-├── tsconfig.json          # TypeScript configuration
-└── README.md              # This file
-```
-
-## Path Aliases
-
-This template uses path aliases for cleaner imports:
-
-```typescript
-// Instead of relative paths
-import config from '../../../config';
-
-// Use path aliases
-import config from '@/config';
-```
-
-The `@/` alias maps to the `src/` directory.
-
-## Adding New Routes
-
-Create route files in `src/routes/`:
-
-```typescript
-// src/routes/users.ts
-import { Router } from 'express';
-
-const router = Router();
-
-router.get('/', (req, res) => {
-  res.json({ message: 'Users route' });
-});
-
-export default router;
-```
-
-Then import in `server.ts`:
-
-```typescript
-import userRoutes from '@/routes/users';
-app.use('/users', userRoutes);
-```
-
-## Code Quality Tools
-
-### ESLint
-
-This project uses ESLint with TypeScript support and Prettier integration. The configuration includes:
-
-- TypeScript recommended rules
-- Prettier integration (conflicts disabled)
-- Node.js globals
-
-Lint your code:
+Run tests in watch mode:
 
 ```bash
-# Check for issues
-npm run lint
-
-# Auto-fix issues
-npm run lint:fix
+npm test
 ```
 
-### Prettier
-
-The ESLint configuration automatically runs Prettier and reports formatting issues as linting errors, so running `npm run lint:fix` will format your code.
-
-You can also run Prettier directly if needed:
+Run tests once:
 
 ```bash
-# Format all files
-npx prettier --write .
-
-# Check formatting without modifying files
-npx prettier --check .
+npm run test:run
 ```
 
-## Environment Variables
+## MQTT Topics
 
-Available environment variables:
+Examples of active topic groups:
 
-| Variable | Description | Default |
-| -------- | ----------- | ------- |
-| `PORT`   | Server port | `3000`  |
+- `building/sensors/{floor}/{placeId}/{sensorType}`
+- `building/devices/{floor}/{deviceId}`
+- `building/occupancy/{floor}`
+- `building/elevator`
+- `building/evacuation/actions`
+- `building/evacuation/alerts`
 
-## Troubleshooting
+## HTTP Routes
 
-### Port Already in Use
+- `POST /elevator/state`
+- `POST /evacuation/trigger`
+- `DELETE /simulation/reset`
 
-If you get an error that the port is already in use, either:
+### Example: Trigger evacuation
 
-1. Change the `PORT` in your `.env` file
-2. Kill the process using that port:
+```http
+POST /evacuation/trigger
+Content-Type: application/json
 
-```bash
-# Find the process
-lsof -i :3000
-
-# Kill it
-kill -9 <PID>
+{
+  "openDoors": true,
+  "soundAlert": true
+}
 ```
 
-### Module Not Found
+### Example: Reset simulation data
 
-If you encounter module resolution errors:
+```http
+DELETE /simulation/reset
+Content-Type: application/json
 
-1. Delete `node_modules/` and `package-lock.json`
-2. Run `npm install` again
-3. Restart your development server
-
-### TypeScript Errors
-
-Ensure your TypeScript version is up to date:
-
-```bash
-npm install typescript@latest --save-dev
+{
+  "target": "both"
+}
 ```
 
-**Note:** If you're still experiencing TypeScript issues after updating, verify that you don't have a global TypeScript installation that might be conflicting:
+Valid reset targets:
 
-```bash
-# Check if TypeScript is installed globally
-npm list -g typescript
+- `realtime`
+- `firestore`
+- `both`
 
-# If it shows a version, remove it
-npm remove -g typescript
-```
+## Data Flow
 
-### Docker: "tsc: command not found"
+1. Devices publish MQTT messages.
+2. The backend receives and routes messages through `MqttService`.
+3. Handlers persist current state to Firebase Realtime Database.
+4. Alert-worthy sensor readings also create Firestore `sensor_events` records.
+5. Routes can publish manual evacuation and control commands back to MQTT.
 
-If you encounter a `tsc: command not found` error when building in Docker, this is a sign that the global TypeScript installation is interfering with the local one. There are two solutions:
+## Notes
 
-**Solution 1: Remove Global TypeScript (Recommended)**
+- latest device and sensor state are stored in Realtime Database
+- event-style history is stored in Firestore
+- device connectivity uses heartbeat and `lastSeen`
 
-```bash
-npm remove -g typescript
-```
-
-Then rebuild your Docker image.
-
-**Solution 2: Use Local TypeScript Binary in Dockerfile**
-
-Modify your Dockerfile to use the local TypeScript compiler directly:
-
-```dockerfile
-# Instead of:
-RUN npm run build
-
-# Use:
-RUN ./node_modules/.bin/tsc
-```
-
-This bypasses npm scripts and uses the local TypeScript installation directly.
-
-### ESLint Errors
-
-If ESLint reports errors after updating:
-
-1. Clear ESLint cache: `npx eslint --clear-cache`
-2. Restart your editor/IDE
-3. Run `npm run lint:fix` to auto-fix issues
-
-## License
-
-This project is licensed under the Apache-2.0 License.
-
-## Author
-
-Matthew Roxas
-
-## Support
-
-For issues and questions, please open an issue in the GitHub repository.

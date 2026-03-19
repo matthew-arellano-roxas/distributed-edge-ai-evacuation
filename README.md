@@ -1,256 +1,125 @@
 # Smart Building Evacuation Guidance System
 
-An IoT and computer vision research prototype for intelligent building evacuation.
+An IoT, edge AI, and backend-driven smart building prototype for evacuation guidance, occupancy awareness, and hazard response.
 
-This system is built to guide people to safety during emergencies by combining occupancy monitoring, shortest-path routing, real-time path availability, floor-level controllers, backup power awareness, and light-based evacuation guidance.
+The repository combines embedded devices, computer vision, MQTT communication, and a Node.js backend to simulate and coordinate evacuation behavior in a building environment.
 
-## Project Scope
+## What The System Does
 
-This prototype combines several parts of a smart building evacuation system in one platform:
+- reads building sensor data such as flame, gas, temperature, and presence
+- tracks occupancy with computer vision and floor-level updates
+- sends evacuation commands through MQTT
+- stores latest device and sensor state in Firebase Realtime Database
+- stores sensor event history in Firestore
+- exposes backend routes for simulation control and evacuation actions
+- supports floor-level ESP32 controllers and central coordination logic
 
-- embedded controllers for floor-level sensing and actions
-- IoT communication through MQTT
-- edge devices across multiple floors
-- AI-assisted computer vision for occupancy detection
-- real-time evacuation routing logic
-- backend and app-based monitoring
-- API exposure through `ngrok`
+## Main Repository Modules
 
-## What The Prototype Does
+### `app/backend`
 
-- Guides occupants using evacuation lights and floor-level actions
-- Finds the shortest safe evacuation route
-- Reroutes people when a path becomes blocked or unavailable
-- Tracks available and unavailable exits or connections
-- Monitors occupancy per floor
-- Uses camera-based detection to estimate occupancy in real time
-- Supports alternative power operation during outages
-- Sends commands and updates through MQTT across devices
-- Allows monitoring and control through an application layer
+TypeScript backend that:
 
-## System Architecture
-
-### Floor Layer
-
-Each floor uses an `ESP32` controller to:
-
-- read local sensors
-- control floor actions
-- react to evacuation commands
-- help drive smart evacuation guidance such as light direction or route indication
-
-Each floor also uses a `Raspberry Pi Zero 2 W` to:
-
-- receive RTSP camera streams
-- support floor-level edge camera processing and communication
-
-### Main / Ground Floor Layer
-
-A `Raspberry Pi 5` acts as the central intelligence node and is responsible for:
-
-- occupancy management
-- people detection
-- optional recognition logic
-- publishing and coordinating MQTT messages
-- sending commands to ESP32 and Raspberry Pi Zero 2 W devices
-
-### Platform Layer
-
-The wider system also includes:
-
-- a `Node.js` server as the main backend publisher and coordinator
-- a database layer for future or ongoing persistence work
-- an application interface for monitoring and command control
-- `ngrok` to expose backend API endpoints online for frontend access
-
-## Technologies Used
-
-### Embedded and Edge
-
-- `ESP32`
-- `Raspberry Pi Zero 2 W`
-- `Raspberry Pi 5`
-- `PlatformIO`
-- `Arduino framework`
-- `C++`
-
-### Vision and Occupancy
-
-- `Python`
-- `OpenCV`
-- `Ultralytics YOLO`
-- AI-based people detection and occupancy monitoring
-- RTSP camera streaming
-- occupancy detection and floor-level monitoring
-
-### Backend and Connectivity
-
-- `Node.js`
-- `MQTT`
-- REST API architecture
-- `ngrok`
-- planned or in-progress database integration
-
-### AI Components
-
-- `YOLO` for person and occupancy detection
-- optional recognition workflow on `Raspberry Pi 5`
-- camera-based monitoring through RTSP streams
-- edge-assisted occupancy analysis for evacuation support
-
-### Engineering Areas Demonstrated
-
-- embedded programming
-- distributed device communication
-- smart routing logic
-- safety-focused system design
-- edge AI / computer vision
-- multi-device orchestration
-- backend integration
-
-## Evacuation Logic
-
-The evacuation workflow is designed to adapt in real time:
-
-1. Sensors and cameras collect occupancy and hazard data.
-2. ESP32 controllers report local floor conditions.
-3. The central system evaluates blocked, unavailable, or safe paths.
-4. The routing logic selects the shortest available evacuation route.
-5. Floor controllers guide people through lights and local control actions.
-6. If a path becomes unavailable, the system recalculates and republishes a new route.
-
-This allows the prototype to respond dynamically instead of relying on a fixed static evacuation map.
-
-## Current Repository Contents
-
-This repository currently contains the core prototype modules below:
-
-```text
-.
-|-- evacuation_controller/
-|   |-- src/
-|   |-- lib/
-|   `-- platformio.ini
-|-- smart_building_vision/
-|   |-- yolo_detect.py
-|   |-- yolo_tracking.py
-|   |-- yolo_ui.py
-|   `-- yolo_config.py
-`-- README.md
-```
-
-## Main Modules In This Repo
+- subscribes to MQTT topics
+- processes sensor, occupancy, elevator, and device-status messages
+- stores realtime state in Firebase Realtime Database
+- stores `sensor_events` history in Firestore
+- exposes HTTP routes for simulation reset and evacuation control
 
 ### `evacuation_controller`
 
-An ESP32-based controller that:
+ESP32 controller project that:
 
-- reads flame, temperature, humidity, and ultrasonic sensors
-- models floor routes as a graph
-- recalculates shortest evacuation routes
-- blocks unsafe locations automatically
-- receives and reacts to MQTT commands
-- publishes route updates for each room or zone
+- handles local floor logic
+- can react to evacuation commands
+- integrates with MQTT-based communication
+- is intended for embedded actuation and route guidance behavior
 
 ### `smart_building_vision`
 
-A Python-based occupancy and detection module that:
+Python computer vision module that:
 
 - runs YOLO-based people detection
-- tracks motion direction
-- estimates entering and exiting activity
-- supports floor occupancy awareness
-- can be extended for recognition workflows
+- tracks movement and occupancy-related behavior
+- supports edge-assisted monitoring workflows
 
-## MQTT-Centered Communication
+## High-Level Architecture
 
-MQTT is used as the messaging backbone of the prototype.
+### Device Layer
 
-It enables:
+- ESP32 controllers publish sensor and control data
+- floor-level devices react to evacuation actions
 
-- controller-to-server communication
-- command publishing from the main node
-- route updates to floor devices
-- sensor and occupancy telemetry
-- coordination between ESP32, Raspberry Pi devices, and backend services
+### Edge / Vision Layer
 
-## Engineering Focus
+- Raspberry Pi devices process camera feeds and occupancy logic
 
-This project involves:
+### Backend Layer
 
-- embedded programming
-- distributed device communication
-- real-time routing and control
-- safety-oriented system design
-- edge AI and occupancy monitoring
-- backend integration for monitoring and commands
+- Node.js backend coordinates MQTT, API routes, Firebase, and simulation workflows
 
-## Getting Started
+### Data Layer
 
-### ESP32 Controller
+- Firebase Realtime Database stores latest live state
+- Firestore stores event-oriented history such as `sensor_events`
 
-Requirements:
+## Current Backend Capabilities
 
-- `PlatformIO`
-- ESP32 development board
-- MQTT broker
+- MQTT subscriptions for sensor readings, device status, occupancy, and elevator state
+- evacuation trigger route
+- simulation reset route for Realtime Database, Firestore, or both
+- sensor alert generation for flame, gas, and high temperature
+- Firestore event logging for alert-worthy sensor events
 
-Build:
+## Repository Structure
 
-```bash
-cd evacuation_controller
-pio run
+```text
+.
+|-- app/
+|   `-- backend/
+|-- evacuation_controller/
+|-- smart_building_vision/
+`-- README.md
 ```
 
-Upload:
+## MQTT Examples
 
-```bash
-cd evacuation_controller
-pio run --target upload
+Sensor reading:
+
+```text
+building/sensors/2/room101/temperature
 ```
 
-### Vision Module
+Device status:
 
-Requirements:
-
-- Python 3.10+
-- `opencv-python`
-- `ultralytics`
-- `numpy`
-
-Install:
-
-```bash
-pip install ultralytics opencv-python numpy
+```text
+building/devices/2/esp32-temp-01
 ```
 
-Run:
+## Backend Quick Start
 
 ```bash
-cd smart_building_vision
-python yolo_detect.py --model my_model.pt --source usb0 --thresh 0.5 --resolution 640x480
+cd app/backend
+npm install
+npm run dev
 ```
 
-## Research Direction
+See [app/backend/README.md](/c:/Users/Matthew/Videos/ai-iot-smart-building/app/backend/README.md) for backend setup details.
 
-This prototype is part of a smart building research effort focused on:
+## Research Focus
 
-- safer emergency evacuation
-- occupancy-aware routing
-- resilient operation during power interruptions
-- intelligent route guidance using floor lights and controllers
-- practical integration of embedded systems, AI with YOLO, and web infrastructure
+This project is aimed at:
 
-## Future Expansion
+- evacuation-aware smart building control
+- occupancy-informed routing
+- edge AI and IoT integration
+- MQTT-based distributed coordination
+- simulation and emergency-response workflows
 
-- direct app dashboards for floor-by-floor occupancy and route state
-- stronger recognition and analytics features on Raspberry Pi 5
-- database-backed event history and reporting
-- alternative power state monitoring and failover automation
-- multi-floor unified evacuation visualization
+## Future Work
 
-## Suggested Repository Subtitle
+- richer dashboards for occupancy, alerts, and route state
+- deeper integration between backend, embedded devices, and vision modules
+- expanded testing and simulation tooling
+- stronger route computation and failover logic
 
-If you want a strong GitHub subtitle, use:
-
-`IoT, computer vision, and MQTT-based smart building evacuation with occupancy-aware route guidance`
