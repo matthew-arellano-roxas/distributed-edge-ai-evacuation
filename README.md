@@ -29,7 +29,7 @@ The backend service is responsible for:
 - exposing HTTP routes for simulation reset and control actions
 
 Backend documentation:
-[app/backend/README.md](c:\Users\Matthew\Videos\ai-iot-smart-building\app\backend\README.md)
+[app/backend/README.md](app/backend/README.md)
 
 ### `evacuation_controller`
 
@@ -105,8 +105,8 @@ building/evacuation/actions
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
-cd ai-iot-smart-building
+git clone git@github.com:matthew-arellano-roxas/distributed-edge-ai-evacuation.git
+cd distributed-edge-ai-evacuation
 ```
 
 ### 2. Start the MQTT broker
