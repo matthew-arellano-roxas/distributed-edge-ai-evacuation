@@ -4,7 +4,7 @@ import { env } from 'config/env';
 import { errorHandler, requestLogger } from '@/middleware';
 import { logger, pubSub } from 'config';
 import { createServer } from 'node:http';
-import { initSocketServer } from 'config';
+import { connectRedis, getRedisClient, initSocketServer } from 'config';
 import elevatorRoute from '@/routes/elevator.route';
 import evacuationRoute from '@/routes/evacuation.route';
 import simulationRoute from '@/routes/simulation.route';
@@ -21,14 +21,23 @@ app.use(requestLogger);
 app.use(elevatorRoute);
 app.use(evacuationRoute);
 app.use(simulationRoute);
+app.get('/health', (_req, res) => {
+  res.status(200).json({ ok: true });
+});
+
 app.use(errorHandler);
 
 async function boostrap() {
   try {
-    pubSub.init();
+    await connectRedis();
+    const pingResult = await getRedisClient().ping();
+    logger.info(`Connected to Redis (${pingResult})`);
 
-    httpServer.listen(env.PORT, () => {
-      logger.info(`Server running at http://localhost:${env.PORT}`);
+    pubSub.init();
+    logger.info('MQTT initialization requested');
+
+    httpServer.listen(env.PORT, '0.0.0.0', () => {
+      logger.info(`Server running on 0.0.0.0:${env.PORT}`);
     });
   } catch (error) {
     logger.error('Failed to connect to Redis', error);

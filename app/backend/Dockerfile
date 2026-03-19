@@ -34,7 +34,7 @@ RUN npm install --production
 EXPOSE 3000
 
 # Start the app
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/src/server.js"]
 
 
 # Simple Node.js Dockerfile
@@ -51,4 +51,4 @@ CMD ["node", "dist/server.js"]
 
 # EXPOSE 3000
 
-# CMD ["node", "dist/server.js"]
+# CMD ["node", "dist/src/server.js"]
