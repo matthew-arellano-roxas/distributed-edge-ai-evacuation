@@ -1,5 +1,6 @@
 import mqtt, { MqttClient } from 'mqtt';
 import { env, logger } from 'config';
+import { rtdb } from '@root/config/firebase';
 import {
   handleSensorReadings,
   subscribeToSensors,
@@ -23,6 +24,9 @@ import {
 import type { DeviceStatusMqttPayload } from '@/types/device-status.types';
 
 type JsonValue = unknown;
+type PublishOptions = {
+  retain?: boolean;
+};
 
 class MqttService {
   private client: MqttClient | null = null;
@@ -38,7 +42,11 @@ class MqttService {
     this.registerEvents();
   }
 
-  public async publish(topic: string, payload: object): Promise<void> {
+  public async publish(
+    topic: string,
+    payload: object,
+    options: PublishOptions = {},
+  ): Promise<void> {
     if (!this.client) {
       throw new Error('MQTT client is not initialized');
     }
@@ -46,46 +54,87 @@ class MqttService {
     const message = JSON.stringify(payload);
 
     await new Promise<void>((resolve, reject) => {
-      this.client!.publish(topic, message, (error?: Error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
+      this.client!.publish(
+        topic,
+        message,
+        { retain: options.retain ?? false },
+        (error?: Error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
 
-        resolve();
-      });
+          resolve();
+        },
+      );
     });
+  }
+
+  private async replayPersistedState(): Promise<void> {
+    const topicsToReplay = [
+      MQTT_TOPICS.ELEVATOR_STATE,
+      MQTT_TOPICS.EVACUATION_ACTIONS,
+    ] as const;
+
+    for (const topic of topicsToReplay) {
+      const snapshot = await rtdb.ref(topic).get();
+      if (!snapshot.exists()) {
+        continue;
+      }
+
+      const payload = snapshot.val();
+      if (!payload || typeof payload !== 'object') {
+        continue;
+      }
+
+      await this.publish(topic, payload as Record<string, unknown>, {
+        retain: true,
+      });
+      logger.info('Republished persisted MQTT state', { topic, payload });
+    }
+  }
+
+  private async onConnect(): Promise<void> {
+    logger.info('Connected to MQTT broker');
+
+    try {
+      await subscribeToSensors(this.client!);
+      await subscribeToElevatorState(this.client!);
+      await subscribeToOccupancy(this.client!);
+      await subscribeToDeviceStatus(this.client!);
+      await this.replayPersistedState();
+    } catch (err) {
+      logger.error('Subscription failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  private async handleIncomingMessage(
+    topic: string,
+    payload: Buffer<ArrayBufferLike>,
+  ): Promise<void> {
+    const raw = payload.toString();
+
+    try {
+      const parsed = JSON.parse(raw);
+      await this.routeMessage(topic, parsed);
+
+      logger.info('MQTT JSON received', { topic, parsed });
+    } catch {
+      logger.info('MQTT raw received', { topic, raw });
+    }
   }
 
   private registerEvents(): void {
     if (!this.client) return;
 
-    this.client.on('connect', async () => {
-      logger.info('Connected to MQTT broker');
-
-      try {
-        await subscribeToSensors(this.client!);
-        await subscribeToElevatorState(this.client!);
-        await subscribeToOccupancy(this.client!);
-        await subscribeToDeviceStatus(this.client!);
-      } catch (err) {
-        logger.error('Subscription failed', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+    this.client.on('connect', () => {
+      void this.onConnect();
     });
 
-    this.client.on('message', async (topic, payload) => {
-      const raw = payload.toString();
-
-      try {
-        const parsed = JSON.parse(raw);
-        await this.routeMessage(topic, parsed);
-
-        logger.info('MQTT JSON received', { topic, parsed });
-      } catch {
-        logger.info('MQTT raw received', { topic, raw });
-      }
+    this.client.on('message', (topic, payload) => {
+      void this.handleIncomingMessage(topic, payload);
     });
 
     this.client.on('error', (err) => {
