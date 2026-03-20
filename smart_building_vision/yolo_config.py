@@ -5,7 +5,7 @@ from dataclasses import dataclass
 class Settings:
     recognition_enabled: bool = False
     combine_all_classes: bool = True
-    combined_class_name: str = "object"
+    combined_class_name: str = "person"
     target_label: str | None = None
     movement_ratio_threshold: float = 0.008
     area_smoothing: float = 0.50
