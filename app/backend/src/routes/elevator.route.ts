@@ -2,31 +2,37 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { pubSub } from 'config';
 import { AppError } from '@/errors/AppError';
-import { MQTT_TOPICS } from '@/helpers/mqtt-topics';
+import { getBuildingControlTopic } from '@/helpers/mqtt-topics';
 
 const elevatorRoute = Router();
 
-const elevatorStateSchema = z.object({
-  currentFloor: z.number().finite(),
-  isDoorOpen: z.boolean(),
+const elevatorCommandSchema = z.object({
+  floor: z.number().int().min(1).max(3),
+  controllerFloor: z.string().default('floor1'),
 });
 
-elevatorRoute.post('/elevator/state', async (req, res) => {
-  const parsedBody = elevatorStateSchema.safeParse(req.body);
+elevatorRoute.post('/elevator/control', async (req, res) => {
+  const parsedBody = elevatorCommandSchema.safeParse(req.body);
 
   if (!parsedBody.success) {
     throw new AppError(
-      'currentFloor must be a number and isDoorOpen must be a boolean',
+      'floor must be an integer from 1 to 3 and controllerFloor must be a string',
       400,
     );
   }
 
-  await pubSub.publish(MQTT_TOPICS.ELEVATOR_STATE, parsedBody.data);
+  const topic = getBuildingControlTopic(
+    parsedBody.data.controllerFloor,
+    'elevator',
+  );
+  const command = { floor: parsedBody.data.floor };
+
+  await pubSub.publish(topic, command);
 
   return res.status(202).json({
-    topic: MQTT_TOPICS.ELEVATOR_STATE,
+    topic,
     published: true,
-    state: parsedBody.data,
+    command,
   });
 });
 

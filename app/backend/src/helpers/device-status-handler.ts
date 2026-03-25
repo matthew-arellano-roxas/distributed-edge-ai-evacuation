@@ -34,18 +34,24 @@ export async function handleDeviceStatus(
 
   const floorKey = String(data.floor ?? floor ?? '').trim();
   if (!floorKey) {
-    logger.warn('Skipping device status without floor', { topic, data, deviceId });
+    logger.warn('Skipping device status without floor', {
+      topic,
+      data,
+      deviceId,
+    });
     return;
   }
 
-  const floorRef = rtdb.ref(`${MQTT_TOPICS.DEVICE_STATUS_ROOT}/${floorKey}/${deviceId}`);
+  const floorRef = rtdb.ref(
+    `${MQTT_TOPICS.DEVICE_STATUS_ROOT}/${floorKey}/${deviceId}`,
+  );
   const latestRef = rtdb.ref(`building/device_status/${deviceId}`);
   const now = Date.now();
   const payload: DeviceStatusFirebaseRecord = {
     ...data,
     deviceId,
     floor: floorKey,
-    heartbeat: typeof data.heartbeat === 'number' ? data.heartbeat : now,
+    heartbeat: typeof data.heartbeat === 'number' ? data.heartbeat : undefined,
     lastSeen: now,
   };
 

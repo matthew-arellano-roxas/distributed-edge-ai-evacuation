@@ -12,3 +12,10 @@ export const MQTT_TOPICS = {
 export function getFloorOccupancyTopic(floor: string): string {
   return `${MQTT_TOPICS.OCCUPANCY}/${floor}`;
 }
+
+export function getBuildingControlTopic(
+  floor: string,
+  component: string,
+): string {
+  return `building/control/${floor}/${component}`;
+}
