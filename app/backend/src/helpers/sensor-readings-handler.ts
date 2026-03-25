@@ -1,4 +1,4 @@
-import { SENSOR_TOPICS } from '@/sensors_monitoring/sensor-topics';
+import { SENSOR_TOPICS } from '@/commands/topics/sensor-topics';
 import type {
   FlamePayload,
   MQ2Payload,
