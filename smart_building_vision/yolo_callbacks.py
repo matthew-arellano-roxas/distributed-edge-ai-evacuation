@@ -29,7 +29,14 @@ _load_env_file()
 MQTT_HOST = os.getenv("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_FLOOR = os.getenv("MQTT_FLOOR", "1")
-MQTT_OCCUPANCY_TOPIC = f"building/occupancy/{MQTT_FLOOR}"
+MQTT_TOPIC_TEMPLATE = os.getenv("MQTT_TOPIC_TEMPLATE", "building/occupancy/{floor}")
+MQTT_OCCUPANCY_TOPIC = MQTT_TOPIC_TEMPLATE.format(floor=MQTT_FLOOR)
+
+MQTT_MOVEMENT_KEY = os.getenv("MQTT_MOVEMENT_KEY", "movement")
+MQTT_EVENT_KEY = os.getenv("MQTT_EVENT_KEY", "event")
+MQTT_COUNT_KEY = os.getenv("MQTT_COUNT_KEY", "count")
+MQTT_LABEL_KEY = os.getenv("MQTT_LABEL_KEY", "label")
+MQTT_CONFIDENCE_KEY = os.getenv("MQTT_CONFIDENCE_KEY", "confidence")
 
 _mqtt_client = None
 _mqtt_ready = False
@@ -72,11 +79,11 @@ def _get_mqtt_client():
 def _publish_floor_movement(movement, event_name, count, detection_info):
     client = _get_mqtt_client()
     payload = {
-        "movement": movement,
-        "event": event_name,
-        "count": count,
-        "label": detection_info["label"],
-        "confidence": round(float(detection_info["confidence"]), 4),
+        MQTT_MOVEMENT_KEY: movement,
+        MQTT_EVENT_KEY: event_name,
+        MQTT_COUNT_KEY: count,
+        MQTT_LABEL_KEY: detection_info["label"],
+        MQTT_CONFIDENCE_KEY: round(float(detection_info["confidence"]), 4),
     }
 
     if client is None:
