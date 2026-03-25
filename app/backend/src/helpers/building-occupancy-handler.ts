@@ -10,13 +10,15 @@ export type Occupancy = {
 
 // Firebase
 export type StoredOccupancy = {
-  total_occupancy: number;
+  occupancy: number;
 };
 
 export type FloorOccupancy = {
   floor: string;
   occupancy: number;
 };
+
+const TOTAL_OCCUPANCY_PATH = `${MQTT_TOPICS.OCCUPANCY}/summary`;
 
 function parseFloorFromTopic(topic: string): string | null {
   const [, , floor] = topic.split('/');
@@ -55,15 +57,25 @@ async function saveFloorOccupancy(
 }
 
 async function saveTotalOccupancy(movement: number): Promise<void> {
-  const baseRef = rtdb.ref(MQTT_TOPICS.OCCUPANCY);
+  const baseRef = rtdb.ref(TOTAL_OCCUPANCY_PATH);
   const snapshot = await baseRef.get();
   const currentData = snapshot.exists()
     ? (snapshot.val() as Partial<StoredOccupancy>)
     : null;
-  const currentOccupancy = currentData?.total_occupancy ?? 0;
-  const total_occupancy = nextOccupancyValue(currentOccupancy, movement);
+  const currentOccupancy = currentData?.occupancy ?? 0;
+  const occupancy = nextOccupancyValue(currentOccupancy, movement);
 
-  await baseRef.set({ total_occupancy } as StoredOccupancy);
+  await baseRef.set({ occupancy } as StoredOccupancy);
+}
+
+export async function applyOccupancyDelta(
+  floor: string,
+  movement: number,
+): Promise<void> {
+  await Promise.all([
+    saveFloorOccupancy(floor, movement),
+    saveTotalOccupancy(movement),
+  ]);
 }
 
 export async function handleOccupancy(topic: string, data: Occupancy) {
@@ -81,7 +93,7 @@ export async function handleOccupancy(topic: string, data: Occupancy) {
 
   try {
     if (floor) {
-      await saveFloorOccupancy(floor, movement);
+      await applyOccupancyDelta(floor, movement);
       logger.info('Successfully saved floor occupancy', {
         topic,
         floor,

@@ -1,4 +1,8 @@
 export type EvacuationCommand = {
-  openDoors: boolean;
-  soundAlert: boolean;
+  evacuationMode: 'true' | 'false';
+  sourceFloor?: string;
+  sourceLocation?: string;
+  targetFloors?: string[];
+  triggeredAt?: string;
+  reason?: 'fire_detected' | 'manual';
 };

@@ -8,39 +8,54 @@ import type {
 } from '@/types/device-status.types';
 
 function parseDeviceStatusTopic(topic: string) {
-  const [, , floor, deviceId] = topic.split('/');
-  return { floor, deviceId };
+  const [, floor] = topic.split('/');
+  return { floor };
+}
+
+function isDeviceStatusTopic(topic: string): boolean {
+  return /^building\/[^/]+\/devices$/.test(topic);
 }
 
 export async function handleDeviceStatus(
   topic: string,
   data: DeviceStatusMqttPayload,
 ): Promise<void> {
-  if (!topic.includes(MQTT_TOPICS.DEVICE_STATUS)) {
+  if (!isDeviceStatusTopic(topic)) {
     return;
   }
 
-  const { floor, deviceId: topicDeviceId } = parseDeviceStatusTopic(topic);
-  const deviceId = String(data.deviceId ?? topicDeviceId ?? '').trim();
+  const { floor } = parseDeviceStatusTopic(topic);
+  const deviceId = String(data.deviceId ?? data.deviceName ?? '').trim();
 
   if (!deviceId) {
     logger.warn('Skipping device status without deviceId', { topic, data });
     return;
   }
 
-  const ref = rtdb.ref(`${MQTT_TOPICS.DEVICE_STATUS}/${deviceId}`);
+  const floorKey = String(data.floor ?? floor ?? '').trim();
+  if (!floorKey) {
+    logger.warn('Skipping device status without floor', { topic, data, deviceId });
+    return;
+  }
+
+  const floorRef = rtdb.ref(`${MQTT_TOPICS.DEVICE_STATUS_ROOT}/${floorKey}/${deviceId}`);
+  const latestRef = rtdb.ref(`building/device_status/${deviceId}`);
   const now = Date.now();
   const payload: DeviceStatusFirebaseRecord = {
     ...data,
     deviceId,
-    floor,
+    floor: floorKey,
     heartbeat: typeof data.heartbeat === 'number' ? data.heartbeat : now,
     lastSeen: now,
   };
 
   try {
-    await ref.set(payload);
-    logger.info('Successfully saved device status', { topic, deviceId });
+    await Promise.all([floorRef.set(payload), latestRef.set(payload)]);
+    logger.info('Successfully saved device status', {
+      topic,
+      deviceId,
+      floor: floorKey,
+    });
   } catch (error) {
     logger.error('Failed to save device status', {
       error: error instanceof Error ? error.message : String(error),
@@ -50,5 +65,5 @@ export async function handleDeviceStatus(
 }
 
 export function subscribeToDeviceStatus(client: MqttClient): void {
-  client.subscribe(`${MQTT_TOPICS.DEVICE_STATUS}/#`);
+  client.subscribe(`building/+${MQTT_TOPICS.DEVICE_STATUS_SUFFIX}`);
 }

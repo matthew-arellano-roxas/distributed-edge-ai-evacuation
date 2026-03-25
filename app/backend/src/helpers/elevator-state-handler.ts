@@ -5,7 +5,8 @@ import { MQTT_TOPICS } from './mqtt-topics';
 
 export type ElevatorState = {
   currentFloor: number;
-  isDoorOpen: boolean;
+  targetFloor?: number;
+  isMoving?: boolean;
 };
 
 export async function handleElevatorState(topic: string, data: ElevatorState) {
@@ -22,5 +23,5 @@ export async function handleElevatorState(topic: string, data: ElevatorState) {
 }
 
 export function subscribeToElevatorState(client: MqttClient): void {
-  client.subscribe(MQTT_TOPICS.ELEVATOR_STATE);
+  client.subscribe(`${MQTT_TOPICS.ELEVATOR_STATE}/+/elevator`);
 }

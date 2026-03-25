@@ -71,10 +71,7 @@ class MqttService {
   }
 
   private async replayPersistedState(): Promise<void> {
-    const topicsToReplay = [
-      MQTT_TOPICS.ELEVATOR_STATE,
-      MQTT_TOPICS.EVACUATION_ACTIONS,
-    ] as const;
+    const topicsToReplay = [MQTT_TOPICS.EVACUATION_COMMAND] as const;
 
     for (const topic of topicsToReplay) {
       const snapshot = await rtdb.ref(topic).get();
@@ -143,12 +140,12 @@ class MqttService {
   }
 
   private async routeMessage(topic: string, payload: JsonValue): Promise<void> {
-    if (topic.includes(MQTT_TOPICS.SENSOR_READINGS)) {
+    if (topic.startsWith(`${MQTT_TOPICS.SENSOR_READINGS}/`)) {
       await handleSensorReadings(topic, payload as FlamePayload);
       return;
     }
 
-    if (topic.includes(MQTT_TOPICS.ELEVATOR_STATE)) {
+    if (/^building\/state\/[^/]+\/elevator$/.test(topic)) {
       await handleElevatorState(topic, payload as ElevatorState);
       return;
     }
@@ -158,7 +155,7 @@ class MqttService {
       return;
     }
 
-    if (topic.includes(MQTT_TOPICS.DEVICE_STATUS)) {
+    if (/^building\/[^/]+\/devices$/.test(topic)) {
       await handleDeviceStatus(topic, payload as DeviceStatusMqttPayload);
       return;
     }

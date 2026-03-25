@@ -9,17 +9,12 @@ import { MQTT_TOPICS } from '@/helpers/mqtt-topics';
 
 const evacuationRoute = Router();
 
-const evacuationCommandSchema = z
-  .object({
-    openDoors: z.boolean().optional(),
-    soundAlert: z.boolean().optional(),
-  })
-  .refine(
-    (data) => data.openDoors !== undefined || data.soundAlert !== undefined,
-    {
-      message: 'At least one of openDoors or soundAlert must be provided',
-    },
-  );
+const evacuationCommandSchema = z.object({
+  evacuationMode: z.union([z.boolean(), z.enum(['true', 'false'])]),
+  sourceFloor: z.string().optional(),
+  sourceLocation: z.string().optional(),
+  targetFloors: z.array(z.string()).optional(),
+});
 
 evacuationRoute.post(
   '/evacuation/trigger',
@@ -29,20 +24,35 @@ evacuationRoute.post(
     if (!parsedBody.success) {
       throw new AppError(
         parsedBody.error.issues[0]?.message ??
-          'openDoors and soundAlert must be boolean values',
+          'evacuationMode must be true or false',
         400,
       );
     }
 
-    const command = parsedBody.data as Partial<EvacuationCommand>;
+    const command: EvacuationCommand = {
+      evacuationMode:
+        parsedBody.data.evacuationMode === true ||
+        parsedBody.data.evacuationMode === 'true'
+          ? 'true'
+          : 'false',
+      sourceFloor: parsedBody.data.sourceFloor,
+      sourceLocation: parsedBody.data.sourceLocation,
+      targetFloors: parsedBody.data.targetFloors,
+      triggeredAt: new Date().toISOString(),
+      reason: 'manual',
+    };
 
-    await pubSub.publish(MQTT_TOPICS.EVACUATION_ACTIONS, command);
+    await pubSub.publish(MQTT_TOPICS.EVACUATION_COMMAND, command, {
+      retain: true,
+    });
 
-    const ref = rtdb.ref(MQTT_TOPICS.EVACUATION_ACTIONS);
-    await ref.set(command);
+    await Promise.all([
+      rtdb.ref(MQTT_TOPICS.EVACUATION_COMMAND).set(command),
+      rtdb.ref(MQTT_TOPICS.EVACUATION_STATE).set(command),
+    ]);
 
     return res.status(202).json({
-      topic: MQTT_TOPICS.EVACUATION_ACTIONS,
+      topic: MQTT_TOPICS.EVACUATION_COMMAND,
       published: true,
       command,
     });
