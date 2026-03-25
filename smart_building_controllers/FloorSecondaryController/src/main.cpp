@@ -55,7 +55,7 @@ EasyUltrasonic ul1(UL1_TRIGGER_PIN, UL1_ECHO_PIN);
 EasyUltrasonic ul2(UL2_TRIGGER_PIN, UL2_ECHO_PIN);
 
 std::string getDeviceStatusTopic(const std::string &floor);
-std::string setDeviceStatus(const std::string &status);
+std::string setDeviceStatus(const std::string &status, bool includeHeartbeat = false);
 std::string getSensorTopic(const std::string &floor, const std::string &sensorType, const std::string &location = "");
 DHTSensor readDHT22TemperatureC();
 void publishTemperatureC(DHTSensor dht);
@@ -93,6 +93,18 @@ EasyTask sensorTask("SensorTask", []()
 
     EasyTask::sleep(5000); }, 1, 4096, 1);
 
+EasyTask heartbeatTask("HeartbeatTask", []()
+                       {
+  if (!wifi.isConnected() || !mqtt.isConnected()) {
+    EasyTask::sleep(1000);
+    return;
+  }
+
+  std::string statusTopic = getDeviceStatusTopic(device.floor);
+  std::string payload = setDeviceStatus("online", true);
+  mqtt.publish(statusTopic.c_str(), payload.c_str(), true);
+  EasyTask::sleep(5000); }, 1, 3072, 1);
+
 void setup()
 {
   Serial.begin(115200);
@@ -114,7 +126,7 @@ void setup()
                  {
         Serial.println("MQTT connected");
         std::string statusTopic = getDeviceStatusTopic(device.floor);
-        std::string onlinePayload = setDeviceStatus("online");
+        std::string onlinePayload = setDeviceStatus("online", true);
         mqtt.publish(statusTopic.c_str(), onlinePayload.c_str(), true); });
 
   mqtt.onDisconnect([]()
@@ -123,6 +135,7 @@ void setup()
   wifi.connect();
   mqtt.startTask();
   sensorTask.start();
+  heartbeatTask.start();
 }
 
 void loop()
@@ -136,13 +149,17 @@ std::string getDeviceStatusTopic(const std::string &floor)
   return "building/" + floor + "/devices";
 }
 
-std::string setDeviceStatus(const std::string &status)
+std::string setDeviceStatus(const std::string &status, bool includeHeartbeat)
 {
   JsonDocument doc;
   doc["deviceType"] = device.deviceType;
   doc["deviceName"] = device.deviceName;
   doc["floor"] = device.floor;
   doc["status"] = status;
+  if (includeHeartbeat)
+  {
+    doc["heartbeat"] = millis();
+  }
   std::string payload;
   serializeJson(doc, payload);
   return payload;

@@ -108,7 +108,7 @@ std::string getEvacuationCommandTopic();
 std::string getEvacuationPublishTopic();
 
 // Device status
-std::string buildDeviceStatusPayload(const std::string &status);
+std::string buildDeviceStatusPayload(const std::string &status, bool includeHeartbeat = false);
 
 // Elevator stepper
 void moveElevatorToFloor(int targetFloor);
@@ -212,6 +212,21 @@ EasyTask buttonTask("ButtonTask", []()
     }
     EasyTask::sleep(50); }, 1, 2048, 1);
 
+EasyTask heartbeatTask("HeartbeatTask", []()
+                       {
+    if (!wifi.isConnected() || !mqtt.isConnected())
+    {
+        EasyTask::sleep(1000);
+        return;
+    }
+
+    mqtt.publish(
+        getDeviceStatusTopic().c_str(),
+        buildDeviceStatusPayload("online", true).c_str(),
+        true
+    );
+    EasyTask::sleep(5000); }, 1, 3072, 1);
+
 // ─────────────────────────────────────────────
 // SETUP
 // ─────────────────────────────────────────────
@@ -247,7 +262,7 @@ void setup()
         Serial.println("MQTT connected");
         mqtt.publish(
             getDeviceStatusTopic().c_str(),
-            buildDeviceStatusPayload("online").c_str(),
+            buildDeviceStatusPayload("online", true).c_str(),
             true
         );
         subscribeToAllTopics(); });
@@ -259,6 +274,7 @@ void setup()
     mqtt.startTask();
     elevatorTask.start();
     buttonTask.start();
+    heartbeatTask.start();
 }
 
 // ─────────────────────────────────────────────
@@ -407,13 +423,17 @@ void subscribeToAllTopics()
 // ─────────────────────────────────────────────
 // DEVICE STATUS
 // ─────────────────────────────────────────────
-std::string buildDeviceStatusPayload(const std::string &status)
+std::string buildDeviceStatusPayload(const std::string &status, bool includeHeartbeat)
 {
     JsonDocument doc;
     doc["deviceType"] = device.deviceType;
     doc["deviceName"] = device.deviceName;
     doc["floor"] = device.floor;
     doc["status"] = status;
+    if (includeHeartbeat)
+    {
+        doc["heartbeat"] = millis();
+    }
     std::string payload;
     serializeJson(doc, payload);
     return payload;
