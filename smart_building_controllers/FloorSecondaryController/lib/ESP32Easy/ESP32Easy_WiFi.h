@@ -2,18 +2,6 @@
 #include <WiFi.h>
 #include <functional>
 
-// ============================================================
-//  ESP32Easy_WiFi.h
-//  Simple WiFi connection helper
-//
-//  Usage:
-//    EasyWiFi wifi("MySSID", "mypassword");
-//    wifi.connect();         // blocking connect
-//    wifi.connectAsync();    // non-blocking, use in task
-//
-//    wifi.onConnect([]() { Serial.println("WiFi up!"); });
-// ============================================================
-
 class EasyWiFi {
 public:
     using ConnectFn = std::function<void()>;
@@ -24,9 +12,32 @@ public:
     void onConnect(ConnectFn fn)    { _onConnect = fn; }
     void onDisconnect(ConnectFn fn) { _onDisconnect = fn; }
 
-    // Blocking connect — waits until connected or timeout
+    void setStaticIP(
+        const IPAddress& localIP,
+        const IPAddress& gateway,
+        const IPAddress& subnet,
+        const IPAddress& primaryDNS = IPAddress(0, 0, 0, 0),
+        const IPAddress& secondaryDNS = IPAddress(0, 0, 0, 0)) {
+        _useStaticIP = true;
+        _localIP = localIP;
+        _gateway = gateway;
+        _subnet = subnet;
+        _primaryDNS = primaryDNS;
+        _secondaryDNS = secondaryDNS;
+    }
+
+    void clearStaticIP() { _useStaticIP = false; }
+
     bool connect(uint32_t timeoutMs = 15000) {
         WiFi.mode(WIFI_STA);
+        if (_useStaticIP) {
+            if (!WiFi.config(_localIP, _gateway, _subnet, _primaryDNS, _secondaryDNS)) {
+                return false;
+            }
+        } else {
+            WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+        }
+
         WiFi.begin(_ssid, _password);
 
         uint32_t start = millis();
@@ -39,7 +50,6 @@ public:
         return true;
     }
 
-    // Non-blocking — call in a task loop
     void loop() {
         bool connected = WiFi.status() == WL_CONNECTED;
         if (connected && !_wasConnected) {
@@ -56,7 +66,6 @@ public:
     String ip()        { return WiFi.localIP().toString(); }
     int rssi()         { return WiFi.RSSI(); }
 
-    // Block until connected (use inside a task)
     void waitUntilConnected() {
         while (!isConnected()) delay(250);
     }
@@ -67,4 +76,10 @@ private:
     ConnectFn   _onConnect    = nullptr;
     ConnectFn   _onDisconnect = nullptr;
     bool        _wasConnected = false;
+    bool        _useStaticIP  = false;
+    IPAddress   _localIP;
+    IPAddress   _gateway;
+    IPAddress   _subnet;
+    IPAddress   _primaryDNS;
+    IPAddress   _secondaryDNS;
 };

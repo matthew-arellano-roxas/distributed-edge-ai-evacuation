@@ -5,6 +5,7 @@
 #include "WifiCredentials.h"
 #include "MQTTCredentials.h"
 #include "ESP32Easy_Mux.h"
+#include "network_config.h"
 #include "FloorMainControllerPins.h"
 #include <vector>
 #include <ArduinoJson.h>
@@ -153,6 +154,7 @@ void setup()
     mqtt.subscribe(getEvacuationCommandTopic().c_str(), [](const String &topic, const String &msg)
                    { handleEvacuationCommand(msg); });
 
+    wifi.setStaticIP(localIp, gateway, subnet, dns);
     wifi.connect();
     mqtt.startTask();
 

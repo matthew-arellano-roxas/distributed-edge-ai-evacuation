@@ -3,6 +3,7 @@
 #include "ESP32Easy_MQTT.h"
 #include "ESP32Easy_Task.h"
 #include "FloorSecondaryControllerPins.h"
+#include "network_config.h"
 #include "MQTTCredentials.h"
 #include "WifiCredentials.h"
 #include <ArduinoJson.h>
@@ -132,6 +133,7 @@ void setup()
   mqtt.onDisconnect([]()
                     { Serial.println("Secondary ESP32 MQTT disconnected"); });
 
+  wifi.setStaticIP(localIp, gateway, subnet, dns);
   wifi.connect();
   mqtt.startTask();
   sensorTask.start();
