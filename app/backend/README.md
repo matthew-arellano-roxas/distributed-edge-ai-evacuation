@@ -64,7 +64,7 @@ Optional:
 
 ```env
 NODE_ENV=development
-ALLOWED_ORIGINS=http://localhost:5173
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8080
 MQTT_USERNAME=
 MQTT_PASSWORD=
 ```
@@ -117,13 +117,14 @@ Examples of active topic groups:
 - `building/sensors/{floor}/{placeId}/{sensorType}`
 - `building/devices/{floor}/{deviceId}`
 - `building/occupancy/{floor}`
-- `building/elevator`
-- `building/evacuation/actions`
+- `building/state/{floor}/elevator`
+- `building/control/{floor}/{component}`
+- `building/command/evacuation`
 - `building/evacuation/alerts`
 
 ## HTTP Routes
 
-- `POST /elevator/state`
+- `POST /elevator/control`
 - `POST /evacuation/trigger`
 - `DELETE /simulation/reset`
 
@@ -134,8 +135,10 @@ POST /evacuation/trigger
 Content-Type: application/json
 
 {
-  "openDoors": true,
-  "soundAlert": true
+  "evacuationMode": true,
+  "sourceFloor": "floor1",
+  "sourceLocation": "room101",
+  "targetFloors": ["floor2", "floor3"]
 }
 ```
 
@@ -169,4 +172,3 @@ Valid reset targets:
 - latest device and sensor state are stored in Realtime Database
 - event-style history is stored in Firestore
 - device connectivity uses heartbeat and `lastSeen`
-

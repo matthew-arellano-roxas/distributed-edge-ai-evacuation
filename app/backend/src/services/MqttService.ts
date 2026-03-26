@@ -22,6 +22,10 @@ import {
   subscribeToOccupancy,
 } from '@/helpers/building-occupancy-handler';
 import type { DeviceStatusMqttPayload } from '@/types/device-status.types';
+import {
+  handleEvacuationCommand,
+  subscribeToEvacuationCommand,
+} from '@/helpers/evacuation-command-handler';
 
 type JsonValue = unknown;
 type PublishOptions = {
@@ -99,6 +103,7 @@ class MqttService {
       await subscribeToElevatorState(this.client!);
       await subscribeToOccupancy(this.client!);
       await subscribeToDeviceStatus(this.client!);
+      await subscribeToEvacuationCommand(this.client!);
       await this.replayPersistedState();
     } catch (err) {
       logger.error('Subscription failed', {
@@ -152,6 +157,11 @@ class MqttService {
 
     if (topic.includes(MQTT_TOPICS.OCCUPANCY)) {
       await handleOccupancy(topic, payload as Occupancy);
+      return;
+    }
+
+    if (topic === MQTT_TOPICS.EVACUATION_COMMAND) {
+      await handleEvacuationCommand(topic, payload);
       return;
     }
 

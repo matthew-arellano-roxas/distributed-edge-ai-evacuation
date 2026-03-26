@@ -31,7 +31,7 @@ The backend service is responsible for:
 Backend documentation:
 [app/backend/README.md](app/backend/README.md)
 
-### `evacuation_controller`
+### `smart_building_controllers`
 
 The ESP32 controller project is used for floor-level device behavior, including:
 
@@ -85,7 +85,7 @@ building/devices/2/esp32-temp-01
 Evacuation action:
 
 ```text
-building/evacuation/actions
+building/command/evacuation
 ```
 
 ## Repository Structure
@@ -93,8 +93,9 @@ building/evacuation/actions
 ```text
 .
 |-- app/
-|   `-- backend/
-|-- evacuation_controller/
+|   |-- backend/
+|   `-- frontend/
+|-- smart_building_controllers/
 |-- smart_building_vision/
 |-- docker-compose.yaml
 `-- README.md
@@ -167,7 +168,7 @@ Important:
 - model files such as `.pt` may also be ignored depending on your `.gitignore`
 - if the Raspberry Pi needs a model file for inference, copy that model separately after cloning
 
-### 5. Set up the ESP32 controller
+### 5. Set up the ESP32 controllers
 
 Requirements:
 
@@ -178,7 +179,7 @@ Requirements:
 Basic workflow:
 
 ```bash
-cd evacuation_controller
+cd smart_building_controllers/BuildingMainController
 pio run
 pio run --target upload
 ```
