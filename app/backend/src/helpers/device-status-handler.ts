@@ -16,6 +16,12 @@ function isDeviceStatusTopic(topic: string): boolean {
   return /^building\/[^/]+\/devices$/.test(topic);
 }
 
+function omitUndefined<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as T;
+}
+
 export async function handleDeviceStatus(
   topic: string,
   data: DeviceStatusMqttPayload,
@@ -23,6 +29,8 @@ export async function handleDeviceStatus(
   if (!isDeviceStatusTopic(topic)) {
     return;
   }
+
+  logger.info('Handling device status payload', { topic, data });
 
   const { floor } = parseDeviceStatusTopic(topic);
   const deviceId = String(data.deviceId ?? data.deviceName ?? '').trim();
@@ -47,13 +55,13 @@ export async function handleDeviceStatus(
   );
   const latestRef = rtdb.ref(`building/device_status/${deviceId}`);
   const now = Date.now();
-  const payload: DeviceStatusFirebaseRecord = {
+  const payload = omitUndefined<DeviceStatusFirebaseRecord>({
     ...data,
     deviceId,
     floor: floorKey,
     heartbeat: typeof data.heartbeat === 'number' ? data.heartbeat : undefined,
     lastSeen: now,
-  };
+  });
 
   try {
     await Promise.all([floorRef.set(payload), latestRef.set(payload)]);
@@ -61,15 +69,24 @@ export async function handleDeviceStatus(
       topic,
       deviceId,
       floor: floorKey,
+      floorPath: `${MQTT_TOPICS.DEVICE_STATUS_ROOT}/${floorKey}/${deviceId}`,
+      latestPath: `building/device_status/${deviceId}`,
+      payload,
     });
   } catch (error) {
     logger.error('Failed to save device status', {
       error: error instanceof Error ? error.message : String(error),
       topic,
+      deviceId,
+      floor: floorKey,
+      payload,
     });
   }
 }
 
 export function subscribeToDeviceStatus(client: MqttClient): void {
   client.subscribe(`building/+${MQTT_TOPICS.DEVICE_STATUS_SUFFIX}`);
+  logger.info('Subscribed to device status topics', {
+    topic: `building/+${MQTT_TOPICS.DEVICE_STATUS_SUFFIX}`,
+  });
 }

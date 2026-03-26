@@ -7,14 +7,6 @@ export interface FlamePayload {
   location?: string;
 }
 
-export interface PresencePayload {
-  type: 'presence';
-  detected: boolean;
-  deviceId: string;
-  updatedAt: string;
-  location?: string;
-}
-
 export interface TemperaturePayload {
   type: 'temperature';
   value: number;

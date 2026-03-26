@@ -5,5 +5,4 @@ export const SENSOR_TOPICS = {
   TEMPERATURE: `${MQTT_TOPICS.SENSOR_READINGS}/+/temperature`,
   FLAME: `${MQTT_TOPICS.SENSOR_READINGS}/+/+/flame`,
   MQ2: `${MQTT_TOPICS.SENSOR_READINGS}/+/gas`,
-  PRESENCE: `${MQTT_TOPICS.SENSOR_READINGS}/+/+/presence`,
 } as const;

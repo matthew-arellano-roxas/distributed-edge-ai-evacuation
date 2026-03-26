@@ -2,20 +2,18 @@ import { SENSOR_TOPICS } from '@/commands/topics/sensor-topics';
 import type {
   FlamePayload,
   MQ2Payload,
-  PresencePayload,
   TemperaturePayload,
 } from '@/types/sensor-payload.types';
 import { pubSub } from '@root/config';
+import { logger } from '@root/config';
 import { db, rtdb } from '@root/config/firebase';
 import { MqttClient } from 'mqtt/*';
 import { EvacuationCommand } from '@/types/building-commands.types';
 import { MQTT_TOPICS } from '@/helpers/mqtt-topics';
-import { applyOccupancyDelta } from './building-occupancy-handler';
 
 export type SensorData =
   | FlamePayload
   | MQ2Payload
-  | PresencePayload
   | TemperaturePayload;
 
 export interface SensorPayload {
@@ -35,7 +33,8 @@ function parseTopic(topic: string) {
   const parts = topic.split('/');
   const floor = parts[2] ?? '';
   const sensorType = parts[parts.length - 1] ?? '';
-  const placeId = parts.length === 5 ? (parts[3] ?? floor) : floor;
+  const placeId =
+    parts.length > 4 ? (parts.slice(3, -1).join('/') ?? floor) : floor;
   return { floor, placeId, sensorType };
 }
 
@@ -79,16 +78,6 @@ function normalizeSensorPayload(
       deviceId,
       updatedAt,
     } as MQ2Payload;
-  }
-
-  if (sensorType === 'presence') {
-    return {
-      type: 'presence',
-      detected: toBooleanString(data.detected ?? data.presence),
-      deviceId,
-      updatedAt,
-      location: String(data.location ?? placeId),
-    } as PresencePayload;
   }
 
   if (sensorType === 'temperature') {
@@ -181,13 +170,26 @@ export async function handleSensorReadings(
   const { floor, placeId, sensorType } = parseTopic(topic);
   const normalized = normalizeSensorPayload(sensorType, floor, placeId, data);
   if (!normalized) {
+    logger.warn('Ignoring sensor payload that could not be normalized', {
+      topic,
+      floor,
+      placeId,
+      sensorType,
+      data,
+    });
     return;
   }
   const ref = rtdb.ref(
     `${MQTT_TOPICS.SENSOR_READINGS}/${floor}/${placeId}/${sensorType}`,
   );
-  const previousSnapshot =
-    normalized.type === 'presence' ? await ref.get() : null;
+  logger.info('Handling sensor payload', {
+    topic,
+    floor,
+    placeId,
+    sensorType,
+    rtdbPath: `${MQTT_TOPICS.SENSOR_READINGS}/${floor}/${placeId}/${sensorType}`,
+    normalized,
+  });
 
   if (normalized.type === 'flame' && normalized.detected) {
     const message = `Fire detected in ${placeId} on floor ${floor}`;
@@ -259,33 +261,19 @@ export async function handleSensorReadings(
     });
   }
 
-  if (
-    normalized.type === 'presence' &&
-    normalized.detected &&
-    placeId.startsWith('fire-exit-')
-  ) {
-    const previousData = previousSnapshot?.exists()
-      ? (previousSnapshot.val() as Partial<PresencePayload>)
-      : null;
-    const wasDetected = previousData?.detected === true;
-
-    if (!wasDetected) {
-      await applyOccupancyDelta(floor, -1);
-
-      await createSensorEvent({
-        floor,
-        placeId,
-        sensorType,
-        eventType: 'exit_presence_detected',
-        message: `Presence detected near ${placeId} on floor ${floor}`,
-        data: normalized,
-      });
-    }
-  }
-
   await ref.set(normalized);
+  logger.info('Saved sensor payload to RTDB', {
+    topic,
+    floor,
+    placeId,
+    sensorType,
+    rtdbPath: `${MQTT_TOPICS.SENSOR_READINGS}/${floor}/${placeId}/${sensorType}`,
+  });
 }
 
 export function subscribeToSensors(client: MqttClient): void {
   client.subscribe(SENSOR_TOPICS.ALL);
+  logger.info('Subscribed to sensor topics', {
+    topic: SENSOR_TOPICS.ALL,
+  });
 }

@@ -96,7 +96,9 @@ class MqttService {
   }
 
   private async onConnect(): Promise<void> {
-    logger.info('Connected to MQTT broker');
+    logger.info('Connected to MQTT broker', {
+      brokerUrl: env.MQTT_URL,
+    });
 
     try {
       await subscribeToSensors(this.client!);
@@ -104,6 +106,13 @@ class MqttService {
       await subscribeToOccupancy(this.client!);
       await subscribeToDeviceStatus(this.client!);
       await subscribeToEvacuationCommand(this.client!);
+      logger.info('MQTT subscriptions registered', {
+        sensorRoot: `${MQTT_TOPICS.SENSOR_READINGS}/#`,
+        deviceStatus: `building/+${MQTT_TOPICS.DEVICE_STATUS_SUFFIX}`,
+        evacuationCommand: MQTT_TOPICS.EVACUATION_COMMAND,
+        occupancyRoot: `${MQTT_TOPICS.OCCUPANCY}/#`,
+        elevatorStatePattern: 'building/state/{floor}/elevator',
+      });
       await this.replayPersistedState();
     } catch (err) {
       logger.error('Subscription failed', {
@@ -120,11 +129,19 @@ class MqttService {
 
     try {
       const parsed = JSON.parse(raw);
+      logger.info('MQTT message received', {
+        topic,
+        payloadType: 'json',
+      });
       await this.routeMessage(topic, parsed);
 
-      logger.info('MQTT JSON received', { topic, parsed });
+      logger.info('MQTT message processed', { topic, parsed });
     } catch {
-      logger.info('MQTT raw received', { topic, raw });
+      logger.info('MQTT message received', {
+        topic,
+        payloadType: 'raw',
+        raw,
+      });
     }
   }
 
@@ -146,26 +163,31 @@ class MqttService {
 
   private async routeMessage(topic: string, payload: JsonValue): Promise<void> {
     if (topic.startsWith(`${MQTT_TOPICS.SENSOR_READINGS}/`)) {
+      logger.info('Routing MQTT topic to sensor handler', { topic });
       await handleSensorReadings(topic, payload as FlamePayload);
       return;
     }
 
     if (/^building\/state\/[^/]+\/elevator$/.test(topic)) {
+      logger.info('Routing MQTT topic to elevator handler', { topic });
       await handleElevatorState(topic, payload as ElevatorState);
       return;
     }
 
     if (topic.includes(MQTT_TOPICS.OCCUPANCY)) {
+      logger.info('Routing MQTT topic to occupancy handler', { topic });
       await handleOccupancy(topic, payload as Occupancy);
       return;
     }
 
     if (topic === MQTT_TOPICS.EVACUATION_COMMAND) {
+      logger.info('Routing MQTT topic to evacuation handler', { topic });
       await handleEvacuationCommand(topic, payload);
       return;
     }
 
     if (/^building\/[^/]+\/devices$/.test(topic)) {
+      logger.info('Routing MQTT topic to device status handler', { topic });
       await handleDeviceStatus(topic, payload as DeviceStatusMqttPayload);
       return;
     }
