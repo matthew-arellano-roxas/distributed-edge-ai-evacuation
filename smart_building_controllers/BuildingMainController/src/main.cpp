@@ -1,11 +1,14 @@
 #include <Arduino.h>
 #include "ESP32Easy_WiFi.h"
+#include "ESP32Easy_Ethernet.h"
 #include "ESP32Easy_MQTT.h"
 #include "ESP32Easy_Task.h"
 #include "BuildingControllerPins.h"
 #include "network_config.h"
+#include "NetworkMode.h"
 #include "MQTTCredentials.h"
 #include "WifiCredentials.h"
+#include <Ethernet.h>
 #include <ArduinoJson.h>
 #include <string>
 #include <Stepper.h>
@@ -64,7 +67,62 @@ struct ElevatorDoorState
 DeviceInfo device;
 
 EasyWiFi wifi(WIFI_SSID, WIFI_PASS);
-EasyMQTT mqtt(MQTT_BROKER, MQTT_PORT, ESP_MQTT_CLIENT_ID);
+EasyEthernet ethernet(W5500_CS);
+EthernetClient ethernetClient;
+EasyMQTT mqttWifi(MQTT_BROKER, MQTT_PORT, ESP_MQTT_CLIENT_ID);
+EasyMQTT mqttEthernet(MQTT_BROKER, MQTT_PORT, ESP_MQTT_CLIENT_ID, ethernetClient);
+EasyMQTT &mqtt = USE_ETHERNET ? mqttEthernet : mqttWifi;
+
+bool networkIsConnected()
+{
+    return USE_ETHERNET ? ethernet.isConnected() : wifi.isConnected();
+}
+
+void setupNetwork()
+{
+    if (USE_ETHERNET)
+    {
+        ethernet.begin(mac, localIp, dns, gateway, subnet);
+        return;
+    }
+
+    wifi.setStaticIP(localIp, gateway, subnet, dns);
+    wifi.connect();
+}
+
+void loopNetwork()
+{
+    if (USE_ETHERNET)
+    {
+        ethernet.loop();
+        return;
+    }
+
+    wifi.loop();
+}
+
+void registerNetworkEvents()
+{
+    if (USE_ETHERNET)
+    {
+        ethernet.onConnect([]()
+                           {
+            Serial.print("Building controller Ethernet IP: ");
+            Serial.println(ethernet.localIP()); });
+
+        ethernet.onDisconnect([]()
+                              { Serial.println("Building controller Ethernet lost"); });
+        return;
+    }
+
+    wifi.onConnect([]()
+                   {
+        Serial.print("Tertiary ESP32 WiFi IP: ");
+        Serial.println(WiFi.localIP()); });
+
+    wifi.onDisconnect([]()
+                      { Serial.println("Tertiary ESP32 WiFi lost"); });
+}
 
 // Stepper: ULN2003 — IN1 IN2 IN3 IN4
 Stepper elevatorStepper(STEPPER_STEPS_PER_REV,
@@ -221,7 +279,7 @@ EasyTask buttonTask("ButtonTask", []()
             }
         }
 
-        if (wifi.isConnected() && mqtt.isConnected())
+        if (networkIsConnected() && mqtt.isConnected())
         {
             triggerEvacuationMode();
         }
@@ -230,7 +288,7 @@ EasyTask buttonTask("ButtonTask", []()
 
 EasyTask heartbeatTask("HeartbeatTask", []()
                        {
-    if (!wifi.isConnected() || !mqtt.isConnected())
+    if (!networkIsConnected() || !mqtt.isConnected())
     {
         EasyTask::sleep(1000);
         return;
@@ -265,13 +323,7 @@ void setup()
         buildDeviceStatusPayload("offline").c_str(),
         true, 1);
 
-    wifi.onConnect([]()
-                   {
-        Serial.print("Tertiary ESP32 WiFi IP: ");
-        Serial.println(WiFi.localIP()); });
-
-    wifi.onDisconnect([]()
-                      { Serial.println("Tertiary ESP32 WiFi lost"); });
+    registerNetworkEvents();
 
     mqtt.onConnect([]()
                    {
@@ -286,8 +338,7 @@ void setup()
     mqtt.onDisconnect([]()
                       { Serial.println("Tertiary ESP32 MQTT disconnected"); });
 
-    wifi.setStaticIP(localIp, gateway, subnet, dns);
-    wifi.connect();
+    setupNetwork();
     mqtt.startTask();
     elevatorTask.start();
     buttonTask.start();
@@ -299,7 +350,7 @@ void setup()
 // ─────────────────────────────────────────────
 void loop()
 {
-    wifi.loop();
+    loopNetwork();
     delay(100);
 }
 

@@ -1,8 +1,5 @@
 #pragma once
 
-// ESP32 Static IP
-#define STATIC_IP_ADDRESS "89.0.142.86"
-
 // MQTT
 #define ESP_MQTT_CLIENT_ID "esp32-001"
 #define ESP_MQTT_USER ""

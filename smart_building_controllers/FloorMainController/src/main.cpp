@@ -1,12 +1,15 @@
 #include <Arduino.h>
 #include "ESP32Easy_WiFi.h"
+#include "ESP32Easy_Ethernet.h"
 #include "ESP32Easy_MQTT.h"
 #include "ESP32Easy_Task.h"
+#include "NetworkMode.h"
 #include "WifiCredentials.h"
 #include "MQTTCredentials.h"
 #include "ESP32Easy_Mux.h"
 #include "network_config.h"
 #include "FloorMainControllerPins.h"
+#include <Ethernet.h>
 #include <vector>
 #include <ArduinoJson.h>
 #include <string>
@@ -59,7 +62,15 @@ const std::vector<std::string> ROOMS = {
 
 // END OF CONFIGURATION — Do not need to edit below this line
 EasyWiFi wifi(WIFI_SSID, WIFI_PASS);
-EasyMQTT mqtt(MQTT_BROKER, MQTT_PORT, ESP_MQTT_CLIENT_ID);
+EasyEthernet ethernet(W5500_CS);
+EthernetClient ethernetClient;
+EasyMQTT mqttWifi(MQTT_BROKER, MQTT_PORT, ESP_MQTT_CLIENT_ID);
+EasyMQTT mqttEthernet(
+    MQTT_BROKER,
+    MQTT_PORT,
+    ESP_MQTT_CLIENT_ID,
+    ethernetClient);
+EasyMQTT &mqtt = USE_ETHERNET ? mqttEthernet : mqttWifi;
 EasyMux mux(MUX_S0_PIN, MUX_S1_PIN, MUX_S2_PIN, MUX_S3_PIN, MUX_SIG_PIN);
 
 DeviceInfo device;
@@ -67,6 +78,51 @@ DeviceInfo device;
 // FIX 3: Use volatile + mutex for thread-safe access across tasks
 volatile boolean EvacuationMode = false;
 SemaphoreHandle_t evacuationMutex = NULL;
+
+bool networkIsConnected()
+{
+    return USE_ETHERNET ? ethernet.isConnected() : wifi.isConnected();
+}
+
+void setupNetwork()
+{
+    if (USE_ETHERNET)
+    {
+        ethernet.begin(mac, localIp, dns, gateway, subnet);
+        return;
+    }
+
+    wifi.setStaticIP(localIp, gateway, subnet, dns);
+    wifi.connect();
+}
+
+void loopNetwork()
+{
+    if (USE_ETHERNET)
+    {
+        ethernet.loop();
+        return;
+    }
+
+    wifi.loop();
+}
+
+void registerNetworkEvents()
+{
+    if (USE_ETHERNET)
+    {
+        ethernet.onConnect([]()
+                           {
+            Serial.print("Floor main Ethernet IP: ");
+            Serial.println(ethernet.localIP()); });
+
+        ethernet.onDisconnect([]()
+                              { Serial.println("Ethernet disconnected"); });
+        return;
+    }
+
+    registerNetworkEvents();
+}
 
 void setMqttCredentials();
 std::vector<FlameSensor> readFlameSensors();
@@ -84,7 +140,7 @@ void handleEvacuationCommand(const String &msg);
 // Task
 EasyTask FlameSensorTask("FlameSensorTask", []()
                          {
-    if (!wifi.isConnected() || !mqtt.isConnected()) {
+    if (!networkIsConnected() || !mqtt.isConnected()) {
         EasyTask::sleep(1000);
         return;
     }
@@ -111,7 +167,7 @@ EasyTask FlameSensorTask("FlameSensorTask", []()
 
 EasyTask heartbeatTask("HeartbeatTask", []()
                        {
-    if (!wifi.isConnected() || !mqtt.isConnected()) {
+    if (!networkIsConnected() || !mqtt.isConnected()) {
         EasyTask::sleep(1000);
         return;
     }
@@ -154,8 +210,7 @@ void setup()
     mqtt.subscribe(getEvacuationCommandTopic().c_str(), [](const String &topic, const String &msg)
                    { handleEvacuationCommand(msg); });
 
-    wifi.setStaticIP(localIp, gateway, subnet, dns);
-    wifi.connect();
+    setupNetwork();
     mqtt.startTask();
 
     FlameSensorTask.start();
@@ -164,7 +219,7 @@ void setup()
 
 void loop()
 {
-    wifi.loop();
+    loopNetwork();
     delay(100);
 }
 

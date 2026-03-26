@@ -1,11 +1,14 @@
 #include <Arduino.h>
 #include "ESP32Easy_WiFi.h"
+#include "ESP32Easy_Ethernet.h"
 #include "ESP32Easy_MQTT.h"
 #include "ESP32Easy_Task.h"
 #include "FloorSecondaryControllerPins.h"
 #include "network_config.h"
+#include "NetworkMode.h"
 #include "MQTTCredentials.h"
 #include "WifiCredentials.h"
+#include <Ethernet.h>
 #include <ArduinoJson.h>
 #include <string>
 
@@ -48,7 +51,66 @@ struct GasSensor
 DeviceInfo device;
 
 EasyWiFi wifi(WIFI_SSID, WIFI_PASS);
-EasyMQTT mqtt(MQTT_BROKER, MQTT_PORT, ESP_MQTT_CLIENT_ID);
+EasyEthernet ethernet(W5500_CS);
+EthernetClient ethernetClient;
+EasyMQTT mqttWifi(MQTT_BROKER, MQTT_PORT, ESP_MQTT_CLIENT_ID);
+EasyMQTT mqttEthernet(
+    MQTT_BROKER,
+    MQTT_PORT,
+    ESP_MQTT_CLIENT_ID,
+    ethernetClient);
+EasyMQTT &mqtt = USE_ETHERNET ? mqttEthernet : mqttWifi;
+
+bool networkIsConnected()
+{
+  return USE_ETHERNET ? ethernet.isConnected() : wifi.isConnected();
+}
+
+void setupNetwork()
+{
+  if (USE_ETHERNET)
+  {
+    ethernet.begin(mac, localIp, dns, gateway, subnet);
+    return;
+  }
+
+  wifi.setStaticIP(localIp, gateway, subnet, dns);
+  wifi.connect();
+}
+
+void loopNetwork()
+{
+  if (USE_ETHERNET)
+  {
+    ethernet.loop();
+    return;
+  }
+
+  wifi.loop();
+}
+
+void registerNetworkEvents()
+{
+  if (USE_ETHERNET)
+  {
+    ethernet.onConnect([]()
+                       {
+        Serial.print("Secondary ESP32 Ethernet IP: ");
+        Serial.println(ethernet.localIP()); });
+
+    ethernet.onDisconnect([]()
+                          { Serial.println("Secondary ESP32 Ethernet lost"); });
+    return;
+  }
+
+  wifi.onConnect([]()
+                 {
+        Serial.print("Secondary ESP32 WiFi IP: ");
+        Serial.println(WiFi.localIP()); });
+
+  wifi.onDisconnect([]()
+                    { Serial.println("Secondary ESP32 WiFi lost"); });
+}
 
 EasyDHT22 dht(DHT22_PIN);
 EasyMQ2 mq2(MQ2_A0_PIN, MQ2_D0_PIN);
@@ -68,7 +130,7 @@ void publishUltrasonic(boolean hasPresence, const std::string &location);
 EasyTask sensorTask("SensorTask", []()
                     {
     // FIX 1: Use || so we skip if EITHER WiFi or MQTT is disconnected
-    if (!wifi.isConnected() || !mqtt.isConnected()) {
+    if (!networkIsConnected() || !mqtt.isConnected()) {
         EasyTask::sleep(1000);
         return;
     }
@@ -96,7 +158,7 @@ EasyTask sensorTask("SensorTask", []()
 
 EasyTask heartbeatTask("HeartbeatTask", []()
                        {
-  if (!wifi.isConnected() || !mqtt.isConnected()) {
+  if (!networkIsConnected() || !mqtt.isConnected()) {
     EasyTask::sleep(1000);
     return;
   }
@@ -115,13 +177,7 @@ void setup()
   ul1.begin();
   ul2.begin();
 
-  wifi.onConnect([]()
-                 {
-        Serial.print("Secondary ESP32 WiFi IP: ");
-        Serial.println(WiFi.localIP()); });
-
-  wifi.onDisconnect([]()
-                    { Serial.println("Secondary ESP32 WiFi lost"); });
+  registerNetworkEvents();
 
   mqtt.onConnect([]()
                  {
@@ -133,8 +189,7 @@ void setup()
   mqtt.onDisconnect([]()
                     { Serial.println("Secondary ESP32 MQTT disconnected"); });
 
-  wifi.setStaticIP(localIp, gateway, subnet, dns);
-  wifi.connect();
+  setupNetwork();
   mqtt.startTask();
   sensorTask.start();
   heartbeatTask.start();
@@ -142,7 +197,7 @@ void setup()
 
 void loop()
 {
-  wifi.loop();
+  loopNetwork();
   delay(100);
 }
 
