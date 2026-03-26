@@ -8,7 +8,7 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 
 # Install all dependencies (including devDependencies for TypeScript build)
-RUN npm install
+RUN npm install --include=dev
 
 # Copy source files
 COPY . .
@@ -28,7 +28,7 @@ COPY --from=builder /usr/src/app/dist ./dist
 COPY package*.json ./
 
 # Install only production dependencies
-RUN npm install --production
+RUN npm install --omit=dev
 
 # Expose port (adjust if needed)
 EXPOSE 3000
