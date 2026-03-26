@@ -12,15 +12,14 @@
 #include <ArduinoJson.h>
 #include <string>
 
-#include <EasyUltrasonic.h>
-#include <EasyDHT22.h>
+#include <DHT22.h>
 #include <EasyMQ2.h>
 
 #define DEVICE_TYPE "esp32"
 #define DEVICE_NAME "esp32-secondary-f3"
 #define FLOOR "floor3"
-
-#define DISTANCE_THRESHOLD 30
+#define DHT_STARTUP_DELAY_MS 2000UL
+#define DHT_RETRY_DELAY_MS 50UL
 
 struct DeviceInfo
 {
@@ -36,12 +35,6 @@ struct DHTSensor
   boolean isValid; // FIX 3: Track whether the reading is valid
 };
 
-struct PresenceSensor
-{
-  std::string location;
-  int pin;
-};
-
 struct GasSensor
 {
   int level;
@@ -49,6 +42,7 @@ struct GasSensor
 };
 
 DeviceInfo device;
+unsigned long bootCompletedAt = 0;
 
 EasyWiFi wifi(WIFI_SSID, WIFI_PASS);
 EasyEthernet ethernet(W5500_CS);
@@ -68,12 +62,33 @@ bool networkIsConnected()
 
 void setupNetwork()
 {
+  Serial.printf(
+      "[NET] setupNetwork start | mode=%s\n",
+      USE_ETHERNET ? "Ethernet" : "WiFi");
+
   if (USE_ETHERNET)
   {
+    Serial.printf(
+        "[NET] Ethernet config | ip=%s gateway=%s subnet=%s dns=%s broker=%s:%d\n",
+        localIp.toString().c_str(),
+        gateway.toString().c_str(),
+        subnet.toString().c_str(),
+        dns.toString().c_str(),
+        MQTT_BROKER,
+        MQTT_PORT);
     ethernet.begin(mac, localIp, dns, gateway, subnet);
     return;
   }
 
+  Serial.printf(
+      "[NET] WiFi config | ssid=%s ip=%s gateway=%s subnet=%s dns=%s broker=%s:%d\n",
+      WIFI_SSID,
+      localIp.toString().c_str(),
+      gateway.toString().c_str(),
+      subnet.toString().c_str(),
+      dns.toString().c_str(),
+      MQTT_BROKER,
+      MQTT_PORT);
   wifi.setStaticIP(localIp, gateway, subnet, dns);
   wifi.connect();
 }
@@ -112,10 +127,8 @@ void registerNetworkEvents()
                     { Serial.println("Secondary ESP32 WiFi lost"); });
 }
 
-EasyDHT22 dht(DHT22_PIN);
+DHT22 dht22(DHT22_PIN);
 EasyMQ2 mq2(MQ2_A0_PIN, MQ2_D0_PIN);
-EasyUltrasonic ul1(UL1_TRIGGER_PIN, UL1_ECHO_PIN);
-EasyUltrasonic ul2(UL2_TRIGGER_PIN, UL2_ECHO_PIN);
 
 std::string getDeviceStatusTopic(const std::string &floor);
 std::string setDeviceStatus(const std::string &status, bool includeHeartbeat = false);
@@ -124,16 +137,25 @@ DHTSensor readDHT22TemperatureC();
 void publishTemperatureC(DHTSensor dht);
 void publishGas(GasSensor gas);
 GasSensor readMQ2Gas();
-boolean hasPresenceNearFireExit(EasyUltrasonic &ul, int threshold);
-void publishUltrasonic(boolean hasPresence, const std::string &location);
 
 EasyTask sensorTask("SensorTask", []()
                     {
     // FIX 1: Use || so we skip if EITHER WiFi or MQTT is disconnected
     if (!networkIsConnected() || !mqtt.isConnected()) {
+        static unsigned long lastWaitLog = 0;
+        if (millis() - lastWaitLog >= 3000) {
+            lastWaitLog = millis();
+            Serial.printf(
+                "[TASK] SensorTask waiting | network=%s mqtt=%s mode=%s\n",
+                networkIsConnected() ? "up" : "down",
+                mqtt.isConnected() ? "up" : "down",
+                USE_ETHERNET ? "Ethernet" : "WiFi");
+        }
         EasyTask::sleep(1000);
         return;
     }
+
+    Serial.println("[TASK] SensorTask running");
 
     // FIX 3: Only publish DHT22 if the reading is valid
     DHTSensor dht22 = readDHT22TemperatureC();
@@ -147,52 +169,68 @@ EasyTask sensorTask("SensorTask", []()
     GasSensor gasReading = readMQ2Gas();
     publishGas(gasReading);
 
-    // FIX 4 & 5: Use lowercase slugified location names consistent with main ESP32
-    boolean ul1Presence = hasPresenceNearFireExit(ul1, DISTANCE_THRESHOLD);
-    publishUltrasonic(ul1Presence, "fire-exit-1");
-
-    boolean ul2Presence = hasPresenceNearFireExit(ul2, DISTANCE_THRESHOLD);
-    publishUltrasonic(ul2Presence, "fire-exit-2");
-
     EasyTask::sleep(5000); }, 1, 4096, 1);
 
 EasyTask heartbeatTask("HeartbeatTask", []()
                        {
   if (!networkIsConnected() || !mqtt.isConnected()) {
+    static unsigned long lastWaitLog = 0;
+    if (millis() - lastWaitLog >= 3000) {
+      lastWaitLog = millis();
+      Serial.printf(
+          "[TASK] HeartbeatTask waiting | network=%s mqtt=%s mode=%s\n",
+          networkIsConnected() ? "up" : "down",
+          mqtt.isConnected() ? "up" : "down",
+          USE_ETHERNET ? "Ethernet" : "WiFi");
+    }
     EasyTask::sleep(1000);
     return;
   }
 
   std::string statusTopic = getDeviceStatusTopic(device.floor);
   std::string payload = setDeviceStatus("online", true);
+  Serial.printf("[MQTT] Publishing heartbeat -> %s\n", statusTopic.c_str());
   mqtt.publish(statusTopic.c_str(), payload.c_str(), true);
   EasyTask::sleep(5000); }, 1, 3072, 1);
 
 void setup()
 {
   Serial.begin(115200);
+  delay(300);
+  Serial.println("[BOOT] FloorSecondaryController setup start");
+  Serial.printf("[BOOT] Network mode = %s\n", USE_ETHERNET ? "Ethernet" : "WiFi");
+  Serial.printf("[BOOT] MQTT broker = %s:%d\n", MQTT_BROKER, MQTT_PORT);
   mqtt.setWill(getDeviceStatusTopic(device.floor).c_str(), setDeviceStatus("offline").c_str(), true, 1);
-  dht.begin();
+  Serial.println("[BOOT] MQTT last will configured");
+  Serial.println("[BOOT] DHT22 ready");
   mq2.begin();
-  ul1.begin();
-  ul2.begin();
+  Serial.println("[BOOT] MQ2 initialized");
 
+  Serial.println("[BOOT] Registering network events");
   registerNetworkEvents();
 
+  Serial.println("[BOOT] Registering MQTT events");
   mqtt.onConnect([]()
                  {
         Serial.println("MQTT connected");
         std::string statusTopic = getDeviceStatusTopic(device.floor);
         std::string onlinePayload = setDeviceStatus("online", true);
+        Serial.printf("[MQTT] Publishing online status -> %s\n", statusTopic.c_str());
         mqtt.publish(statusTopic.c_str(), onlinePayload.c_str(), true); });
 
   mqtt.onDisconnect([]()
                     { Serial.println("Secondary ESP32 MQTT disconnected"); });
 
+  Serial.println("[BOOT] Starting network");
   setupNetwork();
+  Serial.println("[BOOT] Starting MQTT task");
   mqtt.startTask();
+  Serial.println("[BOOT] Starting sensor task");
   sensorTask.start();
+  Serial.println("[BOOT] Starting heartbeat task");
   heartbeatTask.start();
+  bootCompletedAt = millis();
+  Serial.println("[BOOT] Setup complete");
 }
 
 void loop()
@@ -209,6 +247,7 @@ std::string getDeviceStatusTopic(const std::string &floor)
 std::string setDeviceStatus(const std::string &status, bool includeHeartbeat)
 {
   JsonDocument doc;
+  doc["deviceId"] = device.deviceName;
   doc["deviceType"] = device.deviceType;
   doc["deviceName"] = device.deviceName;
   doc["floor"] = device.floor;
@@ -233,20 +272,52 @@ std::string getSensorTopic(const std::string &floor, const std::string &sensorTy
 
 DHTSensor readDHT22TemperatureC()
 {
-  EasyDHT22Reading reading = dht.read();
-
-  if (reading.isValid())
-  {
-    Serial.print("Temperature: ");
-    Serial.println(reading.temperatureC);
-    Serial.print("Humidity: ");
-    Serial.println(reading.humidity);
-
-    // FIX 3: Pass isValid = true only when sensor confirms good data
-    return {reading.temperatureC, reading.humidity, true};
+  if (millis() - bootCompletedAt < DHT_STARTUP_DELAY_MS) {
+    Serial.println("DHT22 warming up, skipping read");
+    return {0.0f, 0.0f, false};
   }
 
-  Serial.println("DHT22 read failed");
+  auto readOnce = []() -> DHTSensor {
+    float temperatureC = dht22.getTemperature();
+    float humidity = dht22.getHumidity();
+
+    const bool validReading =
+        !isnan(temperatureC) &&
+        !isnan(humidity) &&
+        temperatureC > -100.0f &&
+        temperatureC < 100.0f &&
+        humidity >= 0.0f &&
+        humidity <= 100.0f &&
+        temperatureC != -273.0f;
+
+    if (validReading)
+    {
+      Serial.print("Temperature: ");
+      Serial.println(temperatureC);
+      Serial.print("Humidity: ");
+      Serial.println(humidity);
+      return {temperatureC, humidity, true};
+    }
+
+    return {0.0f, 0.0f, false};
+  };
+
+  DHTSensor reading = readOnce();
+  if (reading.isValid)
+  {
+    return reading;
+  }
+
+  delay(DHT_RETRY_DELAY_MS);
+  reading = readOnce();
+  if (reading.isValid)
+  {
+    Serial.println("DHT22 second read succeeded");
+    return reading;
+  }
+
+  Serial.print("DHT22 read invalid after retry, error=");
+  Serial.println(dht22.getLastError());
   return {0.0f, 0.0f, false};
 }
 
@@ -269,7 +340,9 @@ void publishTemperatureC(DHTSensor dhtReading)
   doc["humidity"] = dhtReading.humidity;
   std::string payload;
   serializeJson(doc, payload);
-  mqtt.publish(getSensorTopic(device.floor, "temperature").c_str(), payload.c_str());
+  std::string topic = getSensorTopic(device.floor, "temperature");
+  Serial.printf("[MQTT] Publishing temperature -> %s | %s\n", topic.c_str(), payload.c_str());
+  mqtt.publish(topic.c_str(), payload.c_str());
 }
 
 void publishGas(GasSensor gas)
@@ -279,23 +352,9 @@ void publishGas(GasSensor gas)
   doc["isDetected"] = gas.isDetected;
   std::string payload;
   serializeJson(doc, payload);
-  mqtt.publish(getSensorTopic(device.floor, "gas").c_str(), payload.c_str());
-}
-
-// FIX 2: Pass EasyUltrasonic by reference to avoid copying sensor object
-boolean hasPresenceNearFireExit(EasyUltrasonic &ul, int threshold)
-{
-  float distance = ul.readDistanceCm();
-  return distance < threshold;
-}
-
-void publishUltrasonic(boolean hasPresence, const std::string &location)
-{
-  JsonDocument doc;
-  doc["presence"] = hasPresence;
-  std::string payload;
-  serializeJson(doc, payload);
-  mqtt.publish(getSensorTopic(device.floor, "presence", location).c_str(), payload.c_str());
+  std::string topic = getSensorTopic(device.floor, "gas");
+  Serial.printf("[MQTT] Publishing gas -> %s | %s\n", topic.c_str(), payload.c_str());
+  mqtt.publish(topic.c_str(), payload.c_str());
 }
 
 // Topics
@@ -312,7 +371,3 @@ void publishUltrasonic(boolean hasPresence, const std::string &location)
 // "building/sensors/" + floor + "/gas"
 // doc["level"] = gas.level;
 // doc["isDetected"] = gas.isDetected;
-
-// "building/sensors/" + floor + "/fire-exit-1/presence"
-// "building/sensors/" + floor + "/fire-exit-2/presence"
-// doc["presence"] = hasPresence;

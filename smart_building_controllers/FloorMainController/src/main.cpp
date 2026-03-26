@@ -13,6 +13,8 @@
 #include <vector>
 #include <ArduinoJson.h>
 #include <string>
+#include <DHT22.h>
+#include <EasyMQ2.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -21,6 +23,8 @@
 #define FLOOR "floor3"
 
 #define FLAME_THRESHOLD 2000
+#define DHT_STARTUP_DELAY_MS 2000UL
+#define DHT_RETRY_DELAY_MS 50UL
 
 struct LEDPath
 {
@@ -48,6 +52,19 @@ struct FlameSensorInfo
     boolean isPath;
 };
 
+struct DHTSensor
+{
+    float temperature;
+    float humidity;
+    boolean isValid;
+};
+
+struct GasSensor
+{
+    int level;
+    boolean isDetected;
+};
+
 const std::vector<LEDPath> PATH_TO_EXITS = {
     {"fire-exit-1", FIRE_EXIT1_LED_PIN},
     {"fire-exit-2", FIRE_EXIT2_LED_PIN},
@@ -72,8 +89,11 @@ EasyMQTT mqttEthernet(
     ethernetClient);
 EasyMQTT &mqtt = USE_ETHERNET ? mqttEthernet : mqttWifi;
 EasyMux mux(MUX_S0_PIN, MUX_S1_PIN, MUX_S2_PIN, MUX_S3_PIN, MUX_SIG_PIN);
+DHT22 dht22(DHT22_PIN);
+EasyMQ2 mq2(MQ2_A0_PIN, MQ2_D0_PIN);
 
 DeviceInfo device;
+unsigned long bootCompletedAt = 0;
 
 // FIX 3: Use volatile + mutex for thread-safe access across tasks
 volatile boolean EvacuationMode = false;
@@ -121,7 +141,13 @@ void registerNetworkEvents()
         return;
     }
 
-    registerNetworkEvents();
+    wifi.onConnect([]()
+                   {
+        Serial.print("WiFi IP: ");
+        Serial.println(WiFi.localIP()); });
+
+    wifi.onDisconnect([]()
+                      { Serial.println("WiFi disconnected"); });
 }
 
 void setMqttCredentials();
@@ -136,6 +162,11 @@ void setEvacuationMode(boolean isEvacuationModeOn, const std::string &blockedLoc
 void setupLED();
 std::string getEvacuationCommandTopic();
 void handleEvacuationCommand(const String &msg);
+std::string getSensorTopic(const std::string &floor, const std::string &sensorType);
+DHTSensor readDHT22TemperatureC();
+GasSensor readMQ2Gas();
+void publishTemperatureC(const DHTSensor &reading);
+void publishGas(const GasSensor &gas);
 
 // Task
 EasyTask FlameSensorTask("FlameSensorTask", []()
@@ -165,6 +196,28 @@ EasyTask FlameSensorTask("FlameSensorTask", []()
 
     EasyTask::sleep(1000); }, 1, 4096, 1);
 
+EasyTask EnvironmentSensorTask("EnvironmentSensorTask", []()
+                               {
+    if (!networkIsConnected() || !mqtt.isConnected()) {
+        EasyTask::sleep(1000);
+        return;
+    }
+
+    DHTSensor dhtReading = readDHT22TemperatureC();
+    if (dhtReading.isValid)
+    {
+        publishTemperatureC(dhtReading);
+    }
+    else
+    {
+        Serial.println("DHT22 reading invalid, skipping publish");
+    }
+
+    GasSensor gasReading = readMQ2Gas();
+    publishGas(gasReading);
+
+    EasyTask::sleep(5000); }, 1, 4096, 1);
+
 EasyTask heartbeatTask("HeartbeatTask", []()
                        {
     if (!networkIsConnected() || !mqtt.isConnected()) {
@@ -187,15 +240,9 @@ void setup()
     setupLED();
     setMqttCredentials();
     mux.beginInput();
+    mq2.begin();
     mqtt.setWill(getDeviceStatusTopic(device.floor).c_str(), setDeviceStatus("offline").c_str(), true, 1);
-
-    wifi.onConnect([]()
-                   {
-        Serial.print("WiFi IP: ");
-        Serial.println(WiFi.localIP()); });
-
-    wifi.onDisconnect([]()
-                      { Serial.println("WiFi disconnected"); });
+    registerNetworkEvents();
 
     mqtt.onConnect([]()
                    {
@@ -214,7 +261,9 @@ void setup()
     mqtt.startTask();
 
     FlameSensorTask.start();
+    EnvironmentSensorTask.start();
     heartbeatTask.start();
+    bootCompletedAt = millis();
 }
 
 void loop()
@@ -267,6 +316,7 @@ std::vector<FlameSensor> readFlameSensors()
 std::string setDeviceStatus(const std::string &status, bool includeHeartbeat)
 {
     JsonDocument doc;
+    doc["deviceId"] = device.deviceName;
     doc["deviceType"] = device.deviceType;
     doc["deviceName"] = device.deviceName;
     doc["floor"] = device.floor;
@@ -297,6 +347,11 @@ std::string getDeviceStatusTopic(const std::string &floor)
     return "building/" + floor + "/devices";
 }
 
+std::string getSensorTopic(const std::string &floor, const std::string &sensorType)
+{
+    return "building/sensors/" + floor + "/" + sensorType;
+}
+
 void publishSensorReadings(const FlameSensor &flameSensor, const DeviceInfo &deviceInfo)
 {
     std::string topic = getFlameSensorTopic(deviceInfo.floor, flameSensor.location);
@@ -306,6 +361,91 @@ void publishSensorReadings(const FlameSensor &flameSensor, const DeviceInfo &dev
     doc["isFlameDetected"] = flameSensor.isFlameDetected;
     std::string payload;
     serializeJson(doc, payload);
+    mqtt.publish(topic.c_str(), payload.c_str());
+}
+
+DHTSensor readDHT22TemperatureC()
+{
+    if (millis() - bootCompletedAt < DHT_STARTUP_DELAY_MS) {
+        Serial.println("DHT22 warming up, skipping read");
+        return {0.0f, 0.0f, false};
+    }
+
+    auto readOnce = []() -> DHTSensor {
+        float temperatureC = dht22.getTemperature();
+        float humidity = dht22.getHumidity();
+
+        const bool validReading =
+            !isnan(temperatureC) &&
+            !isnan(humidity) &&
+            temperatureC > -100.0f &&
+            temperatureC < 100.0f &&
+            humidity >= 0.0f &&
+            humidity <= 100.0f &&
+            temperatureC != -273.0f;
+
+        if (validReading)
+        {
+            Serial.print("Temperature: ");
+            Serial.println(temperatureC);
+            Serial.print("Humidity: ");
+            Serial.println(humidity);
+            return {temperatureC, humidity, true};
+        }
+
+        return {0.0f, 0.0f, false};
+    };
+
+    DHTSensor reading = readOnce();
+    if (reading.isValid)
+    {
+        return reading;
+    }
+
+    delay(DHT_RETRY_DELAY_MS);
+    reading = readOnce();
+    if (reading.isValid)
+    {
+        Serial.println("DHT22 second read succeeded");
+        return reading;
+    }
+
+    Serial.print("DHT22 read invalid after retry, error=");
+    Serial.println(dht22.getLastError());
+    return {0.0f, 0.0f, false};
+}
+
+GasSensor readMQ2Gas()
+{
+    EasyMQ2Reading gas = mq2.read();
+
+    Serial.print("MQ2 analog: ");
+    Serial.println(gas.analogValue);
+    Serial.print("MQ2 digital detected: ");
+    Serial.println(gas.digitalDetected);
+
+    return {gas.analogValue, gas.digitalDetected};
+}
+
+void publishTemperatureC(const DHTSensor &reading)
+{
+    JsonDocument doc;
+    doc["temperature"] = reading.temperature;
+    doc["humidity"] = reading.humidity;
+    std::string payload;
+    serializeJson(doc, payload);
+    std::string topic = getSensorTopic(device.floor, "temperature");
+    mqtt.publish(topic.c_str(), payload.c_str());
+}
+
+void publishGas(const GasSensor &gas)
+{
+    JsonDocument doc;
+    doc["level"] = gas.level;
+    doc["isDetected"] = gas.isDetected;
+    std::string payload;
+    serializeJson(doc, payload);
+    std::string topic = getSensorTopic(device.floor, "gas");
     mqtt.publish(topic.c_str(), payload.c_str());
 }
 

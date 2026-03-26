@@ -2,6 +2,11 @@
 
 // Main ESP32 Pins
 
+// Environmental sensors
+#define DHT22_PIN 16
+#define MQ2_D0_PIN 21
+#define MQ2_A0_PIN 35
+
 // LED
 #define FIRE_EXIT1_LED_PIN 26
 #define FIRE_EXIT2_LED_PIN 25
