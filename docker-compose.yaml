@@ -35,9 +35,6 @@ services:
       context: ./app/backend
       dockerfile: Dockerfile
     restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     environment:

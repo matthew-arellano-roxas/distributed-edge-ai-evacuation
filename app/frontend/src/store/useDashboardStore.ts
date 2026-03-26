@@ -10,6 +10,8 @@ import { create } from 'zustand';
 import { database, firestore } from '../lib/firebase';
 import {
   controlElevator,
+  getDashboardEvents,
+  getDashboardOverview,
   resetSimulation,
   triggerEvacuation,
 } from '../lib/api';
@@ -76,6 +78,8 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
       overviewLoading: true,
       overviewError: null,
     });
+    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+    let fallbackStarted = false;
 
     const pendingKeys = new Set<string>();
     const totalKeys = new Set([
@@ -86,6 +90,34 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
       'evacuation',
       'elevators',
     ]);
+
+    const loadOverviewFallback = async (): Promise<void> => {
+      try {
+        const overview = await getDashboardOverview();
+        set({
+          overview,
+          overviewLoading: false,
+          overviewError: null,
+        });
+      } catch (error) {
+        set({
+          overviewError: formatError(error),
+          overviewLoading: false,
+        });
+      }
+    };
+
+    const startOverviewFallback = (): void => {
+      if (fallbackStarted) {
+        return;
+      }
+
+      fallbackStarted = true;
+      void loadOverviewFallback();
+      fallbackInterval = setInterval(() => {
+        void loadOverviewFallback();
+      }, 3000);
+    };
 
     const attachListener = (
       key: keyof DashboardOverview,
@@ -106,6 +138,7 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
           }));
         },
         (error) => {
+          startOverviewFallback();
           set({
             overviewError: formatError(error),
             overviewLoading: false,
@@ -124,6 +157,9 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
 
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
+      if (fallbackInterval) {
+        clearInterval(fallbackInterval);
+      }
     };
   },
   subscribeEvents: () => {
@@ -131,8 +167,38 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
       eventsLoading: true,
       eventsError: null,
     });
+    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+    let fallbackStarted = false;
 
-    return onSnapshot(
+    const loadEventsFallback = async (): Promise<void> => {
+      try {
+        const response = await getDashboardEvents(20);
+        set({
+          events: response.events,
+          eventsLoading: false,
+          eventsError: null,
+        });
+      } catch (error) {
+        set({
+          eventsError: formatError(error),
+          eventsLoading: false,
+        });
+      }
+    };
+
+    const startEventsFallback = (): void => {
+      if (fallbackStarted) {
+        return;
+      }
+
+      fallbackStarted = true;
+      void loadEventsFallback();
+      fallbackInterval = setInterval(() => {
+        void loadEventsFallback();
+      }, 5000);
+    };
+
+    const unsubscribe = onSnapshot(
       query(
         collection(firestore, 'sensor_events'),
         orderBy('createdAt', 'desc'),
@@ -151,12 +217,20 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
         });
       },
       (error) => {
+        startEventsFallback();
         set({
           eventsError: formatError(error),
           eventsLoading: false,
         });
       },
     );
+
+    return () => {
+      unsubscribe();
+      if (fallbackInterval) {
+        clearInterval(fallbackInterval);
+      }
+    };
   },
   sendEvacuationCommand: async (payload) => {
     set({ commandError: null, lastCommandMessage: null });

@@ -1,4 +1,6 @@
 import type {
+  DashboardEvent,
+  DashboardOverview,
   ElevatorControlPayload,
   EvacuationPayload,
   SimulationResetTarget,
@@ -26,6 +28,16 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getApiBaseUrl(): string {
   return apiBaseUrl;
+}
+
+export function getDashboardOverview() {
+  return apiRequest<DashboardOverview>('/dashboard/overview');
+}
+
+export function getDashboardEvents(limit = 20) {
+  return apiRequest<{ events: DashboardEvent[]; count: number }>(
+    `/dashboard/events?limit=${limit}`,
+  );
 }
 
 export function triggerEvacuation(payload: EvacuationPayload) {
