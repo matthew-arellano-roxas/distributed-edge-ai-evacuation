@@ -11,10 +11,7 @@ import { MqttClient } from 'mqtt/*';
 import { EvacuationCommand } from '@/types/building-commands.types';
 import { MQTT_TOPICS } from '@/helpers/mqtt-topics';
 
-export type SensorData =
-  | FlamePayload
-  | MQ2Payload
-  | TemperaturePayload;
+export type SensorData = FlamePayload | MQ2Payload | TemperaturePayload;
 
 export interface SensorPayload {
   floor: string;
@@ -38,6 +35,21 @@ function parseTopic(topic: string) {
   return { floor, placeId, sensorType };
 }
 
+function getSensorRtdbPath(
+  floor: string,
+  placeId: string,
+  sensorType: string,
+): string {
+  const isFlatFloorSensor =
+    placeId === floor && (sensorType === 'temperature' || sensorType === 'gas');
+
+  if (isFlatFloorSensor) {
+    return `${MQTT_TOPICS.SENSOR_READINGS}/${floor}/${sensorType}`;
+  }
+
+  return `${MQTT_TOPICS.SENSOR_READINGS}/${floor}/${placeId}/${sensorType}`;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -56,7 +68,10 @@ function normalizeSensorPayload(
     return null;
   }
 
-  const deviceId = `${floor}:${placeId}`;
+  const deviceId =
+    placeId === floor && (sensorType === 'temperature' || sensorType === 'gas')
+      ? `${floor}:${sensorType}`
+      : `${floor}:${placeId}`;
   const updatedAt = new Date().toISOString();
 
   if (sensorType === 'flame') {
@@ -179,96 +194,167 @@ export async function handleSensorReadings(
     });
     return;
   }
-  const ref = rtdb.ref(
-    `${MQTT_TOPICS.SENSOR_READINGS}/${floor}/${placeId}/${sensorType}`,
-  );
+  const rtdbPath = getSensorRtdbPath(floor, placeId, sensorType);
+  const ref = rtdb.ref(rtdbPath);
   logger.info('Handling sensor payload', {
     topic,
     floor,
     placeId,
     sensorType,
-    rtdbPath: `${MQTT_TOPICS.SENSOR_READINGS}/${floor}/${placeId}/${sensorType}`,
+    rtdbPath,
     normalized,
   });
 
-  if (normalized.type === 'flame' && normalized.detected) {
-    const message = `Fire detected in ${placeId} on floor ${floor}`;
-    const targetFloors = await getTargetFloors(floor);
-    const command: EvacuationCommand = {
-      evacuationMode: 'true',
-      sourceFloor: floor,
-      sourceLocation: placeId,
-      targetFloors,
-      triggeredAt: new Date().toISOString(),
-      reason: 'fire_detected',
-    };
+  try {
+    if (normalized.type === 'flame' && normalized.detected) {
+      const message = `Fire detected in ${placeId} on floor ${floor}`;
+      const targetFloors = await getTargetFloors(floor);
+      const command: EvacuationCommand = {
+        evacuationMode: 'true',
+        sourceFloor: floor,
+        sourceLocation: placeId,
+        targetFloors,
+        triggeredAt: new Date().toISOString(),
+        reason: 'fire_detected',
+      };
 
-    await persistEvacuationCommand(command);
+      logger.info('Fire sensor triggered evacuation flow', {
+        topic,
+        placeId,
+        floor,
+        targetFloors,
+      });
 
-    await pubSub.publish(MQTT_TOPICS.EVACUATION_ALERTS, {
-      message,
-      voice: 'fire_alert',
-      placeId,
-      floor,
-      targetFloors,
+      await persistEvacuationCommand(command);
+      logger.info('Persisted evacuation command from flame detection', {
+        topic,
+        command,
+      });
+
+      await pubSub.publish(MQTT_TOPICS.EVACUATION_ALERTS, {
+        message,
+        voice: 'fire_alert',
+        placeId,
+        floor,
+        targetFloors,
+      });
+      logger.info('Published evacuation alert from flame detection', {
+        topic,
+        alertTopic: MQTT_TOPICS.EVACUATION_ALERTS,
+        message,
+      });
+
+      await createSensorEvent({
+        floor,
+        placeId,
+        sensorType,
+        eventType: 'fire_detected',
+        message,
+        data: normalized,
+      });
+      logger.info('Created Firestore sensor event for flame detection', {
+        topic,
+        placeId,
+        floor,
+      });
+    }
+
+    if (normalized.type === 'mq2' && normalized.detected) {
+      const message = `High concentration of gas in ${placeId} on floor ${floor}`;
+
+      logger.info('Gas sensor triggered alert flow', {
+        topic,
+        placeId,
+        floor,
+      });
+
+      await pubSub.publish(MQTT_TOPICS.EVACUATION_ALERTS, {
+        message,
+        voice_message: 'high_gas_alert',
+        placeId,
+      });
+      logger.info('Published evacuation alert from gas detection', {
+        topic,
+        alertTopic: MQTT_TOPICS.EVACUATION_ALERTS,
+        message,
+      });
+
+      await createSensorEvent({
+        floor,
+        placeId,
+        sensorType,
+        eventType: 'gas_detected',
+        message,
+        data: normalized,
+      });
+      logger.info('Created Firestore sensor event for gas detection', {
+        topic,
+        placeId,
+        floor,
+      });
+    }
+
+    if (normalized.type === 'temperature' && normalized.value > 40) {
+      const message = `High temperature in ${placeId} on floor ${floor}`;
+
+      logger.info('Temperature sensor triggered alert flow', {
+        topic,
+        placeId,
+        floor,
+        value: normalized.value,
+      });
+
+      await pubSub.publish(MQTT_TOPICS.EVACUATION_ALERTS, {
+        message,
+        voice_message: 'high_temperature_alert',
+        placeId,
+      });
+      logger.info('Published evacuation alert from temperature threshold', {
+        topic,
+        alertTopic: MQTT_TOPICS.EVACUATION_ALERTS,
+        message,
+      });
+
+      await createSensorEvent({
+        floor,
+        placeId,
+        sensorType,
+        eventType: 'temperature_threshold_exceeded',
+        message,
+        data: normalized,
+      });
+      logger.info('Created Firestore sensor event for temperature threshold', {
+        topic,
+        placeId,
+        floor,
+      });
+    }
+
+    logger.info('Attempting RTDB sensor write', {
+      topic,
+      rtdbPath,
+      normalized,
     });
-
-    await createSensorEvent({
+    await ref.set(normalized);
+    logger.info('Saved sensor payload to RTDB', {
+      topic,
       floor,
       placeId,
       sensorType,
-      eventType: 'fire_detected',
-      message,
-      data: normalized,
+      rtdbPath,
+      normalized,
     });
-  }
-
-  if (normalized.type === 'mq2' && normalized.detected) {
-    const message = `High concentration of gas in ${placeId} on floor ${floor}`;
-
-    await pubSub.publish(MQTT_TOPICS.EVACUATION_ALERTS, {
-      message,
-      voice_message: 'high_gas_alert',
-      placeId,
-    });
-
-    await createSensorEvent({
+  } catch (error) {
+    logger.error('Failed sensor processing pipeline', {
+      error: error instanceof Error ? error.message : String(error),
+      topic,
       floor,
       placeId,
       sensorType,
-      eventType: 'gas_detected',
-      message,
-      data: normalized,
+      rtdbPath,
+      normalized,
     });
   }
-
-  if (normalized.type === 'temperature' && normalized.value > 40) {
-    const message = `High temperature in ${placeId} on floor ${floor}`;
-
-    await pubSub.publish(MQTT_TOPICS.EVACUATION_ALERTS, {
-      message,
-      voice_message: 'high_temperature_alert',
-      placeId,
-    });
-
-    await createSensorEvent({
-      floor,
-      placeId,
-      sensorType,
-      eventType: 'temperature_threshold_exceeded',
-      message,
-      data: normalized,
-    });
-  }
-
-  await ref.set(normalized);
-  logger.info('Saved sensor payload to RTDB', {
-    topic,
-    floor,
-    placeId,
-    sensorType,
-    rtdbPath: `${MQTT_TOPICS.SENSOR_READINGS}/${floor}/${placeId}/${sensorType}`,
-  });
 }
 
 export function subscribeToSensors(client: MqttClient): void {
