@@ -20,7 +20,9 @@ dashboardRoute.get(
   asyncHandler(async (_req, res) => {
     const [devices, latestDevices, sensors, occupancy, evacuation, elevators] =
       await Promise.all([
-        readRealtimePath<Record<string, unknown>>(MQTT_TOPICS.DEVICE_STATUS_ROOT),
+        readRealtimePath<Record<string, unknown>>(
+          MQTT_TOPICS.DEVICE_STATUS_ROOT,
+        ),
         readRealtimePath<Record<string, unknown>>('building/device_status'),
         readRealtimePath<Record<string, unknown>>(MQTT_TOPICS.SENSOR_READINGS),
         readRealtimePath<Record<string, unknown>>(MQTT_TOPICS.OCCUPANCY),

@@ -95,6 +95,7 @@ ElevatorState elevatorState;
 ElevatorDoorState elevatorDoorState;
 volatile bool evacuationMode = false;
 volatile bool evacuationButtonPressed = false;
+volatile int blockedFireFloor = 0;
 
 SemaphoreHandle_t stateMutex = NULL;
 
@@ -145,6 +146,9 @@ void handleMistCommand(const String &msg);
 void handleEvacuationCommand(const String &msg);
 void triggerEvacuationMode();
 void publishEvacuationState(bool on);
+int parseFloorNumber(const JsonVariantConst &value);
+int parseFloorLabel(const std::string &floorLabel);
+int getEvacuationSafeFloor();
 
 // Setup helpers
 void setupStepper();
@@ -205,6 +209,17 @@ EasyTask buttonTask("ButtonTask", []()
     {
         evacuationButtonPressed = false;
         Serial.println("Evacuation button pressed");
+
+        if (blockedFireFloor == 0)
+        {
+            blockedFireFloor = parseFloorLabel(device.floor);
+            if (blockedFireFloor > 0)
+            {
+                Serial.printf(
+                    "Manual evacuation defaulted blocked fire floor to local floor %d\n",
+                    blockedFireFloor);
+            }
+        }
 
         if (wifi.isConnected() && mqtt.isConnected())
         {
@@ -452,6 +467,14 @@ void moveElevatorToFloor(int targetFloor)
         return;
     }
 
+    if (blockedFireFloor > 0 && targetFloor == blockedFireFloor)
+    {
+        Serial.printf(
+            "Blocked elevator command to fire floor %d\n",
+            targetFloor);
+        return;
+    }
+
     if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE)
     {
         if (elevatorState.isMoving)
@@ -466,6 +489,48 @@ void moveElevatorToFloor(int targetFloor)
     }
 
     Serial.printf("Elevator heading to floor %d\n", targetFloor);
+}
+
+int parseFloorNumber(const JsonVariantConst &value)
+{
+    if (value.is<int>())
+    {
+        return value.as<int>();
+    }
+
+    const char *raw = value | "";
+    if (raw == nullptr || raw[0] == '\0')
+    {
+        return 0;
+    }
+
+    return parseFloorLabel(raw);
+}
+
+int parseFloorLabel(const std::string &floorLabel)
+{
+    if (floorLabel.empty())
+    {
+        return 0;
+    }
+
+    std::string floor = floorLabel;
+    if (floor.rfind("floor", 0) == 0)
+    {
+        floor = floor.substr(5);
+    }
+
+    return atoi(floor.c_str());
+}
+
+int getEvacuationSafeFloor()
+{
+    if (blockedFireFloor != 1)
+    {
+        return 1;
+    }
+
+    return 2;
 }
 
 void publishElevatorState()
@@ -695,12 +760,13 @@ void triggerEvacuationMode()
         return;
 
     evacuationMode = true;
+    const int safeFloor = getEvacuationSafeFloor();
     Serial.println("Evacuation mode activated");
 
     openAllExitDoors();
     startBuzzer();
     setMist(true);
-    moveElevatorToFloor(1); // bring elevator to ground floor
+    moveElevatorToFloor(safeFloor);
 
     publishEvacuationState(true);
 }
@@ -725,6 +791,13 @@ void handleEvacuationCommand(const String &msg)
     }
 
     std::string mode = doc["evacuationMode"] | "";
+    const int sourceFloor = parseFloorNumber(doc["sourceFloor"]);
+
+    if (mode == "true" && sourceFloor >= 1 && sourceFloor <= 3)
+    {
+        blockedFireFloor = sourceFloor;
+        Serial.printf("Blocking elevator access to fire floor %d\n", blockedFireFloor);
+    }
 
     if (mode == "true" && !evacuationMode)
     {
@@ -733,6 +806,7 @@ void handleEvacuationCommand(const String &msg)
     else if (mode == "false" && evacuationMode)
     {
         evacuationMode = false;
+        blockedFireFloor = 0;
         closeAllExitDoors();
         stopBuzzer();
         setMist(false);
