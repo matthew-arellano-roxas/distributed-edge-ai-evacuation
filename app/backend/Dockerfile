@@ -24,4 +24,4 @@ RUN npm ci --only=production
 USER node
 
 EXPOSE 3000
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/src/server.js"]
