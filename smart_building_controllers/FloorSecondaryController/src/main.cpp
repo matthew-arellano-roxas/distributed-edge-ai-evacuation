@@ -190,7 +190,7 @@ EasyTask heartbeatTask("HeartbeatTask", []()
   std::string statusTopic = getDeviceStatusTopic(device.floor);
   std::string payload = setDeviceStatus("online", true);
   Serial.printf("[MQTT] Publishing heartbeat -> %s\n", statusTopic.c_str());
-  mqtt.publish(statusTopic.c_str(), payload.c_str(), true);
+  mqtt.publish(statusTopic.c_str(), String(payload.c_str()), true);
   EasyTask::sleep(5000); }, 1, 3072, 1);
 
 void setup()
@@ -342,7 +342,7 @@ void publishTemperatureC(DHTSensor dhtReading)
   serializeJson(doc, payload);
   std::string topic = getSensorTopic(device.floor, "temperature");
   Serial.printf("[MQTT] Publishing temperature -> %s | %s\n", topic.c_str(), payload.c_str());
-  mqtt.publish(topic.c_str(), payload.c_str());
+  mqtt.publish(topic.c_str(), String(payload.c_str()));
 }
 
 void publishGas(GasSensor gas)
@@ -354,7 +354,7 @@ void publishGas(GasSensor gas)
   serializeJson(doc, payload);
   std::string topic = getSensorTopic(device.floor, "gas");
   Serial.printf("[MQTT] Publishing gas -> %s | %s\n", topic.c_str(), payload.c_str());
-  mqtt.publish(topic.c_str(), payload.c_str());
+  mqtt.publish(topic.c_str(), String(payload.c_str()));
 }
 
 // Topics

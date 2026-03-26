@@ -592,7 +592,7 @@ void publishElevatorState()
     doc["isMoving"] = elevatorState.isMoving;
     std::string payload;
     serializeJson(doc, payload);
-    mqtt.publish(getStateTopic("elevator").c_str(), payload.c_str());
+    mqtt.publish(getStateTopic("elevator").c_str(), String(payload.c_str()));
 }
 
 void handleElevatorCommand(const String &msg)
@@ -652,7 +652,7 @@ void publishElevatorDoorState()
     doc["isOpen"] = elevatorDoorState.isOpen;
     std::string payload;
     serializeJson(doc, payload);
-    mqtt.publish(getStateTopic("elevator-door").c_str(), payload.c_str());
+    mqtt.publish(getStateTopic("elevator-door").c_str(), String(payload.c_str()));
 }
 
 void handleElevatorDoorCommand(const String &msg)
@@ -711,7 +711,7 @@ void publishExitDoorState(int index, bool isOpen)
     doc["isOpen"] = isOpen;
     std::string payload;
     serializeJson(doc, payload);
-    mqtt.publish(getStateTopic(EXIT_DOOR_NAMES[index]).c_str(), payload.c_str());
+    mqtt.publish(getStateTopic(EXIT_DOOR_NAMES[index]).c_str(), String(payload.c_str()));
 }
 
 void handleExitDoorCommand(int index, const String &msg)
@@ -782,7 +782,7 @@ void publishMistState(bool on)
     doc["isOn"] = on;
     std::string payload;
     serializeJson(doc, payload);
-    mqtt.publish(getStateTopic("mist").c_str(), payload.c_str());
+    mqtt.publish(getStateTopic("mist").c_str(), String(payload.c_str()));
 }
 
 void handleMistCommand(const String &msg)
@@ -828,7 +828,7 @@ void publishEvacuationState(bool on)
     doc["evacuationMode"] = on ? "true" : "false";
     std::string payload;
     serializeJson(doc, payload);
-    mqtt.publish(getEvacuationPublishTopic().c_str(), payload.c_str(), true);
+    mqtt.publish(getEvacuationPublishTopic().c_str(), String(payload.c_str()), true);
 }
 
 void handleEvacuationCommand(const String &msg)

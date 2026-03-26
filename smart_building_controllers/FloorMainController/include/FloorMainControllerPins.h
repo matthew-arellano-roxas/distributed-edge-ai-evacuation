@@ -13,7 +13,6 @@
 #define HALLWAY_LED_PIN 33
 #define STAIRS_LED_PIN 32
 
-
 // Multiplexer
 #define MUX_S0_PIN 13
 #define MUX_S1_PIN 12

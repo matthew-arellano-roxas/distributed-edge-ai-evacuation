@@ -106,12 +106,33 @@ bool networkIsConnected()
 
 void setupNetwork()
 {
+    Serial.printf(
+        "[NET] setupNetwork start | mode=%s\n",
+        USE_ETHERNET ? "Ethernet" : "WiFi");
+
     if (USE_ETHERNET)
     {
+        Serial.printf(
+            "[NET] Ethernet config | ip=%s gateway=%s subnet=%s dns=%s broker=%s:%d\n",
+            localIp.toString().c_str(),
+            gateway.toString().c_str(),
+            subnet.toString().c_str(),
+            dns.toString().c_str(),
+            MQTT_BROKER,
+            MQTT_PORT);
         ethernet.begin(mac, localIp, dns, gateway, subnet);
         return;
     }
 
+    Serial.printf(
+        "[NET] WiFi config | ssid=%s ip=%s gateway=%s subnet=%s dns=%s broker=%s:%d\n",
+        WIFI_SSID,
+        localIp.toString().c_str(),
+        gateway.toString().c_str(),
+        subnet.toString().c_str(),
+        dns.toString().c_str(),
+        MQTT_BROKER,
+        MQTT_PORT);
     wifi.setStaticIP(localIp, gateway, subnet, dns);
     wifi.connect();
 }
@@ -137,7 +158,7 @@ void registerNetworkEvents()
             Serial.println(ethernet.localIP()); });
 
         ethernet.onDisconnect([]()
-                              { Serial.println("Ethernet disconnected"); });
+                              { Serial.println("Floor main Ethernet disconnected"); });
         return;
     }
 
@@ -147,7 +168,7 @@ void registerNetworkEvents()
         Serial.println(WiFi.localIP()); });
 
     wifi.onDisconnect([]()
-                      { Serial.println("WiFi disconnected"); });
+                      { Serial.println("Floor main WiFi disconnected"); });
 }
 
 void setMqttCredentials();
@@ -172,10 +193,20 @@ void publishGas(const GasSensor &gas);
 EasyTask FlameSensorTask("FlameSensorTask", []()
                          {
     if (!networkIsConnected() || !mqtt.isConnected()) {
+        static unsigned long lastWaitLog = 0;
+        if (millis() - lastWaitLog >= 3000) {
+            lastWaitLog = millis();
+            Serial.printf(
+                "[TASK] FlameSensorTask waiting | network=%s mqtt=%s mode=%s\n",
+                networkIsConnected() ? "up" : "down",
+                mqtt.isConnected() ? "up" : "down",
+                USE_ETHERNET ? "Ethernet" : "WiFi");
+        }
         EasyTask::sleep(1000);
         return;
     }
 
+    Serial.println("[TASK] FlameSensorTask running");
     std::vector<FlameSensor> flameSensorReadings = readFlameSensors();
 
     for (const FlameSensor &reading : flameSensorReadings)
@@ -199,10 +230,20 @@ EasyTask FlameSensorTask("FlameSensorTask", []()
 EasyTask EnvironmentSensorTask("EnvironmentSensorTask", []()
                                {
     if (!networkIsConnected() || !mqtt.isConnected()) {
+        static unsigned long lastWaitLog = 0;
+        if (millis() - lastWaitLog >= 3000) {
+            lastWaitLog = millis();
+            Serial.printf(
+                "[TASK] EnvironmentSensorTask waiting | network=%s mqtt=%s mode=%s\n",
+                networkIsConnected() ? "up" : "down",
+                mqtt.isConnected() ? "up" : "down",
+                USE_ETHERNET ? "Ethernet" : "WiFi");
+        }
         EasyTask::sleep(1000);
         return;
     }
 
+    Serial.println("[TASK] EnvironmentSensorTask running");
     DHTSensor dhtReading = readDHT22TemperatureC();
     if (dhtReading.isValid)
     {
@@ -221,49 +262,78 @@ EasyTask EnvironmentSensorTask("EnvironmentSensorTask", []()
 EasyTask heartbeatTask("HeartbeatTask", []()
                        {
     if (!networkIsConnected() || !mqtt.isConnected()) {
+        static unsigned long lastWaitLog = 0;
+        if (millis() - lastWaitLog >= 3000) {
+            lastWaitLog = millis();
+            Serial.printf(
+                "[TASK] HeartbeatTask waiting | network=%s mqtt=%s mode=%s\n",
+                networkIsConnected() ? "up" : "down",
+                mqtt.isConnected() ? "up" : "down",
+                USE_ETHERNET ? "Ethernet" : "WiFi");
+        }
         EasyTask::sleep(1000);
         return;
     }
 
     std::string statusTopic = getDeviceStatusTopic(device.floor);
     std::string payload = setDeviceStatus("online", true);
-    mqtt.publish(statusTopic.c_str(), payload.c_str(), true);
+    Serial.printf("[MQTT] Publishing heartbeat -> %s\n", statusTopic.c_str());
+    mqtt.publish(statusTopic.c_str(), String(payload.c_str()), true);
     EasyTask::sleep(5000); }, 1, 3072, 1);
 
 void setup()
 {
     Serial.begin(115200);
+    delay(300);
+    Serial.println("[BOOT] FloorMainController setup start");
+    Serial.printf("[BOOT] Network mode = %s\n", USE_ETHERNET ? "Ethernet" : "WiFi");
+    Serial.printf("[BOOT] MQTT broker = %s:%d\n", MQTT_BROKER, MQTT_PORT);
 
     // FIX 3: Create mutex before any task starts
     evacuationMutex = xSemaphoreCreateMutex();
+    Serial.println("[BOOT] Evacuation mutex created");
 
     setupLED();
+    Serial.println("[BOOT] LEDs initialized");
     setMqttCredentials();
+    Serial.println("[BOOT] MQTT credentials configured");
     mux.beginInput();
+    Serial.println("[BOOT] Mux initialized");
     mq2.begin();
+    Serial.println("[BOOT] MQ2 initialized");
     mqtt.setWill(getDeviceStatusTopic(device.floor).c_str(), setDeviceStatus("offline").c_str(), true, 1);
+    Serial.println("[BOOT] MQTT last will configured");
     registerNetworkEvents();
+    Serial.println("[BOOT] Network events registered");
 
     mqtt.onConnect([]()
                    {
         Serial.println("MQTT connected");
         std::string statusTopic = getDeviceStatusTopic(device.floor);
         std::string onlinePayload = setDeviceStatus("online", true);
+        Serial.printf("[MQTT] Publishing online status -> %s\n", statusTopic.c_str());
         mqtt.publish(statusTopic.c_str(), onlinePayload.c_str(), true); });
 
     mqtt.onDisconnect([]()
-                      { Serial.println("MQTT disconnected"); });
+                      { Serial.println("Floor main MQTT disconnected"); });
 
     mqtt.subscribe(getEvacuationCommandTopic().c_str(), [](const String &topic, const String &msg)
                    { handleEvacuationCommand(msg); });
+    Serial.printf("[BOOT] Subscribed to evacuation topic -> %s\n", getEvacuationCommandTopic().c_str());
 
+    Serial.println("[BOOT] Starting network");
     setupNetwork();
+    Serial.println("[BOOT] Starting MQTT task");
     mqtt.startTask();
 
+    Serial.println("[BOOT] Starting flame task");
     FlameSensorTask.start();
+    Serial.println("[BOOT] Starting environment task");
     EnvironmentSensorTask.start();
+    Serial.println("[BOOT] Starting heartbeat task");
     heartbeatTask.start();
     bootCompletedAt = millis();
+    Serial.println("[BOOT] Setup complete");
 }
 
 void loop()
@@ -305,6 +375,12 @@ std::vector<FlameSensor> readFlameSensors()
     for (int ch = 0; ch < (int)flameSensors.size(); ch++)
     {
         int raw = mux.readAnalog(ch);
+        Serial.printf(
+            "[SENSOR] Flame channel=%d location=%s raw=%d detected=%s\n",
+            ch,
+            flameSensors[ch].location.c_str(),
+            raw,
+            isFireDetected(raw) ? "true" : "false");
         flameSensorReadings.push_back({raw,
                                        flameSensors[ch].location,
                                        isFireDetected(raw) ? "true" : "false"});
@@ -361,17 +437,20 @@ void publishSensorReadings(const FlameSensor &flameSensor, const DeviceInfo &dev
     doc["isFlameDetected"] = flameSensor.isFlameDetected;
     std::string payload;
     serializeJson(doc, payload);
-    mqtt.publish(topic.c_str(), payload.c_str());
+    Serial.printf("[MQTT] Publishing flame -> %s | %s\n", topic.c_str(), payload.c_str());
+    mqtt.publish(topic.c_str(), String(payload.c_str()));
 }
 
 DHTSensor readDHT22TemperatureC()
 {
-    if (millis() - bootCompletedAt < DHT_STARTUP_DELAY_MS) {
+    if (millis() - bootCompletedAt < DHT_STARTUP_DELAY_MS)
+    {
         Serial.println("DHT22 warming up, skipping read");
         return {0.0f, 0.0f, false};
     }
 
-    auto readOnce = []() -> DHTSensor {
+    auto readOnce = []() -> DHTSensor
+    {
         float temperatureC = dht22.getTemperature();
         float humidity = dht22.getHumidity();
 
@@ -435,7 +514,8 @@ void publishTemperatureC(const DHTSensor &reading)
     std::string payload;
     serializeJson(doc, payload);
     std::string topic = getSensorTopic(device.floor, "temperature");
-    mqtt.publish(topic.c_str(), payload.c_str());
+    Serial.printf("[MQTT] Publishing temperature -> %s | %s\n", topic.c_str(), payload.c_str());
+    mqtt.publish(topic.c_str(), String(payload.c_str()));
 }
 
 void publishGas(const GasSensor &gas)
@@ -446,7 +526,8 @@ void publishGas(const GasSensor &gas)
     std::string payload;
     serializeJson(doc, payload);
     std::string topic = getSensorTopic(device.floor, "gas");
-    mqtt.publish(topic.c_str(), payload.c_str());
+    Serial.printf("[MQTT] Publishing gas -> %s | %s\n", topic.c_str(), payload.c_str());
+    mqtt.publish(topic.c_str(), String(payload.c_str()));
 }
 
 // FIX 1: Merged setEvacuationMode + implementLEDGuide into one atomic function.
@@ -503,6 +584,7 @@ std::string parseEvacuationCommand(const char *json)
 void handleEvacuationCommand(const String &msg)
 {
     const std::string evacuationMode = parseEvacuationCommand(msg.c_str());
+    Serial.printf("[MQTT] Evacuation command received -> %s\n", evacuationMode.c_str());
 
     // FIX 3: Protect EvacuationMode reads/writes with mutex in MQTT callback
     if (xSemaphoreTake(evacuationMutex, portMAX_DELAY) == pdTRUE)
