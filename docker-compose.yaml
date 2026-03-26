@@ -35,6 +35,9 @@ services:
       context: ./app/backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     environment:
@@ -43,10 +46,13 @@ services:
       MQTT_URL: ${MQTT_URL:-mqtt://mqtt:1883}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+      FIREBASE_SERVICE_ACCOUNT_PATH: ${FIREBASE_SERVICE_ACCOUNT_PATH:-/run/secrets/firebase-service-account.json}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
       FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
       FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
       FIREBASE_DATABASE_URL: ${FIREBASE_DATABASE_URL}
+    volumes:
+      - ${FIREBASE_SERVICE_ACCOUNT_FILE:-./secrets/firebase-service-account.json}:/run/secrets/firebase-service-account.json:ro
     depends_on:
       mqtt:
         condition: service_started
