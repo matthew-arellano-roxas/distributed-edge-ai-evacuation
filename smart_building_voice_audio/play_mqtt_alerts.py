@@ -38,9 +38,9 @@ MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 MQTT_ANNOUNCEMENT_TOPIC = os.getenv("MQTT_ANNOUNCEMENT_TOPIC", "building/evacuation/alerts")
 MQTT_EVACUATION_TOPIC = os.getenv("MQTT_EVACUATION_TOPIC", "building/command/evacuation")
-MQTT_SENSOR_TOPIC = os.getenv("MQTT_SENSOR_TOPIC", "building/sensors/#")
 MQTT_CLIENT_ID = os.getenv("MQTT_ALERT_AUDIO_CLIENT_ID", "mqtt-alert-audio-player")
 ALERT_COOLDOWN_SECONDS = float(os.getenv("ALERT_COOLDOWN_SECONDS", "8"))
+AUDIO_PLAYER = os.getenv("AUDIO_PLAYER", "").strip().lower()
 
 DEFAULT_FIRE_MP3 = AUDIO_DIR / "fire_voice_line.mp3"
 FIRE_FIRST_FLOOR_MP3 = AUDIO_DIR / "fire_first_floor_voice_line.mp3"
@@ -96,58 +96,12 @@ def _extract_floor(payload):
     return None
 
 
-def _parse_sensor_topic(topic):
-    parts = topic.split("/")
-    if len(parts) < 4:
-        return None
-
-    floor = parts[2] if len(parts) > 2 else None
-    sensor_type = parts[-1] if parts else None
-    place = floor
-    if len(parts) > 4:
-        place = "/".join(parts[3:-1])
-
-    return {
-        "floor": floor,
-        "placeId": place,
-        "sensorType": sensor_type,
-    }
-
-
-def _is_sensor_triggered(topic, payload):
-    sensor_info = _parse_sensor_topic(topic)
-    if sensor_info is None:
-        return False, None, None
-
-    sensor_type = str(sensor_info["sensorType"] or "").lower()
-    floor = sensor_info["floor"]
-    payload_floor = payload.get("floor")
-    payload["floor"] = payload_floor or floor
-    payload["placeId"] = payload.get("placeId") or sensor_info["placeId"]
-
-    if sensor_type == "flame":
-        detected = payload.get("detected")
-        active = detected is True or str(detected).lower() == "true"
-        return active, "fire", _extract_floor(payload)
-
-    if sensor_type in ("gas", "mq2"):
-        detected = payload.get("detected") or payload.get("isDetected")
-        active = detected is True or str(detected).lower() == "true"
-        return active, "gas", _extract_floor(payload)
-
-    if sensor_type == "temperature":
-        try:
-            value = float(payload.get("value") or payload.get("temperature") or 0)
-        except (TypeError, ValueError):
-            value = 0
-        return value > 40, "temperature", _extract_floor(payload)
-
-    if sensor_type == "smoke":
-        detected = payload.get("detected")
-        active = detected is True or str(detected).lower() == "true"
-        return active, "smoke", _extract_floor(payload)
-
-    return False, None, None
+def _is_truthy(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"true", "1", "yes", "on"}
 
 
 def _choose_fire_file(floor):
@@ -161,26 +115,20 @@ def _choose_fire_file(floor):
 
 
 def _choose_audio_file(topic, payload):
-    if topic.startswith("building/sensors/"):
-        active, alert_type, floor = _is_sensor_triggered(topic, payload)
-        if not active:
-            return None
-        if alert_type == "fire":
-            return _choose_fire_file(floor)
-        if alert_type == "gas":
-            return GAS_MP3
-        if alert_type == "temperature":
-            return TEMPERATURE_MP3
-        if alert_type == "smoke":
-            return SMOKE_MP3
-        return None
-
     voice_key = str(payload.get("voice") or payload.get("voice_message") or "").strip().lower()
     message = str(payload.get("message") or payload.get("announcement") or "").strip().lower()
     reason = str(payload.get("reason") or "").strip().lower()
     floor = _extract_floor(payload)
 
-    if topic == MQTT_EVACUATION_TOPIC or reason == "fire_detected":
+    if topic == MQTT_EVACUATION_TOPIC:
+        if not _is_truthy(payload.get("evacuationMode")):
+            return None
+        return _choose_fire_file(floor)
+
+    if topic != MQTT_ANNOUNCEMENT_TOPIC:
+        return None
+
+    if reason == "fire_detected":
         return _choose_fire_file(floor)
 
     if voice_key == "fire_alert" or "fire" in message:
@@ -199,7 +147,10 @@ def _choose_audio_file(topic, payload):
 
 
 def _resolve_audio_player():
-    for candidate in ("ffplay", "mpg123", "mpv", "cvlc"):
+    if AUDIO_PLAYER:
+        return AUDIO_PLAYER if shutil.which(AUDIO_PLAYER) else None
+
+    for candidate in ("mpg123", "mpv", "cvlc", "ffplay"):
         if shutil.which(candidate):
             return candidate
     return None
@@ -209,19 +160,26 @@ def _play_mp3(path):
     player = _resolve_audio_player()
     if player is None:
         print(
-            "[AUDIO] No audio player found. Install ffplay, mpg123, mpv, or vlc.",
+            "[AUDIO] No audio player found. Install mpg123, mpv, vlc, or ffplay.",
             file=sys.stderr,
         )
         return
 
     if player == "ffplay":
         command = [player, "-nodisp", "-autoexit", "-loglevel", "error", str(path)]
+    elif player == "mpg123":
+        command = [player, "-q", str(path)]
     elif player == "cvlc":
         command = [player, "--play-and-exit", str(path)]
     else:
         command = [player, str(path)]
 
-    subprocess.run(command, check=False)
+    result = subprocess.run(command, check=False)
+    if result.returncode != 0:
+        print(
+            f"[AUDIO] Player '{player}' failed with exit code {result.returncode} for file {path}",
+            file=sys.stderr,
+        )
 
 
 def _should_skip(key):
@@ -240,9 +198,8 @@ def _on_connect(client, userdata, flags, rc, properties=None):
 
     client.subscribe(MQTT_ANNOUNCEMENT_TOPIC)
     client.subscribe(MQTT_EVACUATION_TOPIC)
-    client.subscribe(MQTT_SENSOR_TOPIC)
     print(
-        f"[AUDIO] Subscribed to {MQTT_ANNOUNCEMENT_TOPIC}, {MQTT_EVACUATION_TOPIC}, and {MQTT_SENSOR_TOPIC} "
+        f"[AUDIO] Subscribed to {MQTT_ANNOUNCEMENT_TOPIC} and {MQTT_EVACUATION_TOPIC} "
         f"at {MQTT_HOST}:{MQTT_PORT}"
     )
 
