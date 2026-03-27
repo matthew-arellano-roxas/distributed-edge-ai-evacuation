@@ -214,6 +214,7 @@ export async function handleSensorReadings(
   try {
     if (normalized.type === 'flame' && normalized.detected) {
       const message = `Fire detected in ${placeId} on floor ${floor}`;
+      const announcement = `Attention. Attention. Fire has been detected in ${placeId} on floor ${floor}. Please evacuate immediately and proceed to the nearest safe exit.`;
       const targetFloors = await getTargetFloors(floor);
       const command: EvacuationCommand = {
         evacuationMode: 'true',
@@ -239,6 +240,7 @@ export async function handleSensorReadings(
 
       await pubSub.publish(MQTT_TOPICS.EVACUATION_ALERTS, {
         message,
+        announcement,
         voice: 'fire_alert',
         placeId,
         floor,
@@ -267,6 +269,7 @@ export async function handleSensorReadings(
 
     if (normalized.type === 'mq2' && normalized.detected) {
       const message = `High concentration of gas in ${placeId} on floor ${floor}`;
+      const announcement = `Attention. Attention. Gas has been detected in ${placeId} on floor ${floor}. Please avoid the area and follow evacuation instructions.`;
 
       logger.info('Gas sensor triggered alert flow', {
         topic,
@@ -276,8 +279,10 @@ export async function handleSensorReadings(
 
       await pubSub.publish(MQTT_TOPICS.EVACUATION_ALERTS, {
         message,
+        announcement,
         voice_message: 'high_gas_alert',
         placeId,
+        floor,
       });
       logger.info('Published evacuation alert from gas detection', {
         topic,
@@ -302,6 +307,7 @@ export async function handleSensorReadings(
 
     if (normalized.type === 'temperature' && normalized.value > 40) {
       const message = `High temperature in ${placeId} on floor ${floor}`;
+      const announcement = `Attention. Attention. High temperature has been detected in ${placeId} on floor ${floor}. Please stay alert and follow safety instructions.`;
 
       logger.info('Temperature sensor triggered alert flow', {
         topic,
@@ -312,8 +318,10 @@ export async function handleSensorReadings(
 
       await pubSub.publish(MQTT_TOPICS.EVACUATION_ALERTS, {
         message,
+        announcement,
         voice_message: 'high_temperature_alert',
         placeId,
+        floor,
       });
       logger.info('Published evacuation alert from temperature threshold', {
         topic,

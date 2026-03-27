@@ -47,6 +47,13 @@ The computer vision module is used for:
 - movement and occupancy tracking
 - edge-assisted monitoring workflows
 
+### `raspberry_pi_announcer`
+
+The Raspberry Pi announcer service is used for:
+
+- subscribing to MQTT evacuation alerts
+- speaking alerts through the Pi audio output or Bluetooth speaker
+
 ## Architecture
 
 ### Device Layer
@@ -96,6 +103,7 @@ building/command/evacuation
 |   `-- frontend/
 |-- smart_building_controllers/
 |-- smart_building_vision/
+|-- raspberry_pi_announcer/
 |-- docker-compose.yaml
 `-- README.md
 ```
