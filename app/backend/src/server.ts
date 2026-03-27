@@ -16,18 +16,7 @@ const httpServer = createServer(app);
 initSocketServer(httpServer);
 
 app.use((req, res, next) => {
-  const requestOrigin = req.headers.origin;
-  const normalizedOrigin = requestOrigin?.replace(/\/+$/, '');
-  const allowedOrigin =
-    normalizedOrigin && env.ALLOWED_ORIGINS.includes(normalizedOrigin)
-      ? normalizedOrigin
-      : null;
-
-  if (allowedOrigin) {
-    res.header('Access-Control-Allow-Origin', allowedOrigin);
-    res.header('Vary', 'Origin');
-    res.header('Access-Control-Allow-Credentials', 'true');
-  }
+  res.header('Access-Control-Allow-Origin', '*');
 
   res.header(
     'Access-Control-Allow-Methods',

@@ -10,6 +10,11 @@ import { db, rtdb } from '@root/config/firebase';
 import { MqttClient } from 'mqtt/*';
 import { EvacuationCommand } from '@/types/building-commands.types';
 import { MQTT_TOPICS } from '@/helpers/mqtt-topics';
+import {
+  patchDashboardOverviewBranch,
+  pushDashboardEvent,
+} from '@/services/dashboard-state-service';
+import { randomUUID } from 'crypto';
 
 export type SensorData = FlamePayload | MQ2Payload | TemperaturePayload;
 
@@ -120,15 +125,37 @@ async function createSensorEvent(params: {
   message: string;
   data: SensorData;
 }) {
-  await db.collection('sensor_events').add({
+  const event = {
+    id: randomUUID(),
     floor: params.floor,
     placeId: params.placeId,
     sensorType: params.sensorType,
     eventType: params.eventType,
     message: params.message,
-    data: params.data,
+    data: params.data as unknown as Record<string, unknown>,
     createdAt: new Date().toISOString(),
-  });
+  };
+
+  try {
+    const doc = await db.collection('sensor_events').add({
+      floor: event.floor,
+      placeId: event.placeId,
+      sensorType: event.sensorType,
+      eventType: event.eventType,
+      message: event.message,
+      data: event.data,
+      createdAt: event.createdAt,
+    });
+    await pushDashboardEvent({ ...event, id: doc.id });
+  } catch (error) {
+    await pushDashboardEvent(event);
+    logger.warn('Failed to save sensor event to Firestore, cached event only', {
+      error: error instanceof Error ? error.message : String(error),
+      eventType: event.eventType,
+      floor: event.floor,
+      placeId: event.placeId,
+    });
+  }
 }
 
 async function getTargetFloors(sourceFloor: string): Promise<string[]> {
@@ -336,6 +363,11 @@ export async function handleSensorReadings(
       normalized,
     });
     await ref.set(normalized);
+    await patchDashboardOverviewBranch(
+      'sensors',
+      rtdbPath.replace(`${MQTT_TOPICS.SENSOR_READINGS}/`, '').split('/'),
+      normalized,
+    );
     logger.info('Saved sensor payload to RTDB', {
       topic,
       floor,
@@ -345,6 +377,11 @@ export async function handleSensorReadings(
       normalized,
     });
   } catch (error) {
+    await patchDashboardOverviewBranch(
+      'sensors',
+      rtdbPath.replace(`${MQTT_TOPICS.SENSOR_READINGS}/`, '').split('/'),
+      normalized,
+    );
     logger.error('Failed sensor processing pipeline', {
       error: error instanceof Error ? error.message : String(error),
       topic,

@@ -2,6 +2,7 @@ import type { MqttClient } from 'mqtt';
 import { logger } from '@root/config';
 import { rtdb } from '@root/config/firebase';
 import { MQTT_TOPICS } from './mqtt-topics';
+import { patchDashboardOverviewBranch } from '@/services/dashboard-state-service';
 import type {
   DeviceStatusFirebaseRecord,
   DeviceStatusMqttPayload,
@@ -65,6 +66,10 @@ export async function handleDeviceStatus(
 
   try {
     await Promise.all([floorRef.set(payload), latestRef.set(payload)]);
+    await Promise.all([
+      patchDashboardOverviewBranch('devices', [floorKey, deviceId], payload),
+      patchDashboardOverviewBranch('latestDevices', [deviceId], payload),
+    ]);
     logger.info('Successfully saved device status', {
       topic,
       deviceId,
@@ -74,6 +79,10 @@ export async function handleDeviceStatus(
       payload,
     });
   } catch (error) {
+    await Promise.all([
+      patchDashboardOverviewBranch('devices', [floorKey, deviceId], payload),
+      patchDashboardOverviewBranch('latestDevices', [deviceId], payload),
+    ]);
     logger.error('Failed to save device status', {
       error: error instanceof Error ? error.message : String(error),
       topic,

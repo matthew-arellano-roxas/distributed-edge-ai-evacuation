@@ -3,6 +3,12 @@ import { z } from 'zod';
 import { asyncHandler } from '@/middleware';
 import { db, rtdb } from '@root/config/firebase';
 import { MQTT_TOPICS } from '@/helpers/mqtt-topics';
+import {
+  getCachedDashboardEvents,
+  getCachedDashboardOverview,
+  setCachedDashboardEvents,
+  setCachedDashboardOverview,
+} from '@/services/dashboard-state-service';
 
 const dashboardRoute = Router();
 
@@ -18,6 +24,11 @@ async function readRealtimePath<T>(path: string): Promise<T | null> {
 dashboardRoute.get(
   '/dashboard/overview',
   asyncHandler(async (_req, res) => {
+    const cachedOverview = await getCachedDashboardOverview();
+    if (cachedOverview) {
+      return res.status(200).json(cachedOverview);
+    }
+
     const [devices, latestDevices, sensors, occupancy, evacuation, elevators] =
       await Promise.all([
         readRealtimePath<Record<string, unknown>>(
@@ -30,7 +41,7 @@ dashboardRoute.get(
         readRealtimePath<Record<string, unknown>>(MQTT_TOPICS.ELEVATOR_STATE),
       ]);
 
-    return res.status(200).json({
+    const overview = {
       devices,
       latestDevices,
       sensors,
@@ -38,7 +49,10 @@ dashboardRoute.get(
       evacuation,
       elevators,
       refreshedAt: new Date().toISOString(),
-    });
+    };
+
+    await setCachedDashboardOverview(overview);
+    return res.status(200).json(overview);
   }),
 );
 
@@ -53,6 +67,14 @@ dashboardRoute.get(
       });
     }
 
+    const cachedEvents = await getCachedDashboardEvents();
+    if (cachedEvents) {
+      return res.status(200).json({
+        events: cachedEvents.slice(0, parsed.data.limit),
+        count: Math.min(cachedEvents.length, parsed.data.limit),
+      });
+    }
+
     const snapshot = await db
       .collection('sensor_events')
       .orderBy('createdAt', 'desc')
@@ -64,6 +86,7 @@ dashboardRoute.get(
       ...doc.data(),
     }));
 
+    await setCachedDashboardEvents(events);
     return res.status(200).json({
       events,
       count: events.length,

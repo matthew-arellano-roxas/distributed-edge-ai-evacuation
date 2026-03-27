@@ -1,15 +1,12 @@
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
-import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import SensorsRoundedIcon from '@mui/icons-material/SensorsRounded';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import VideocamRoundedIcon from '@mui/icons-material/VideocamRounded';
 import StreamRoundedIcon from '@mui/icons-material/StreamRounded';
 import {
-  Avatar,
   AppBar,
   Box,
-  Button,
   Chip,
   Container,
   Divider,
@@ -19,14 +16,12 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Paper,
   Stack,
   Toolbar,
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router';
-import { useAuthStore } from '../store/useAuthStore';
 
 const navItems = [
   { to: '/', label: 'Overview', icon: <DashboardRoundedIcon fontSize="small" /> },
@@ -45,7 +40,6 @@ const navItems = [
 const drawerWidth = 260;
 
 export function AppLayout() {
-  const { user, logout } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navigation = (
@@ -129,74 +123,6 @@ export function AppLayout() {
           </ListItemButton>
         ))}
       </List>
-      </Box>
-      <Divider />
-      <Box sx={{ p: 1.25 }}>
-        <Paper
-          sx={{
-            p: 1.25,
-            borderRadius: 1.5,
-            backgroundColor: 'rgba(255, 255, 255, 0.04)',
-            overflow: 'hidden',
-            border: '1px solid rgba(255,255,255,0.04)',
-            boxShadow: 'none',
-          }}
-        >
-          <Stack direction="row" spacing={1} alignItems="center" minWidth={0}>
-            <Avatar
-              alt={user?.displayName ?? user?.email ?? 'User'}
-              src={user?.photoURL ?? undefined}
-              sx={{ width: 36, height: 36, flexShrink: 0 }}
-            />
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                variant="subtitle2"
-                sx={{
-                  fontWeight: 600,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {user?.displayName ?? 'Signed in user'}
-              </Typography>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{
-                  display: 'block',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {user?.email}
-              </Typography>
-            </Box>
-          </Stack>
-          <Button
-            fullWidth
-            color="inherit"
-            variant="text"
-            size="small"
-            startIcon={<LogoutRoundedIcon />}
-            onClick={() => {
-              void logout();
-            }}
-            sx={{
-              mt: 1.25,
-              minHeight: 36,
-              justifyContent: 'flex-start',
-              px: 1,
-              color: 'rgba(226, 232, 240, 0.88)',
-              '&:hover': {
-                backgroundColor: 'rgba(255,255,255,0.04)',
-              },
-            }}
-          >
-            Sign out
-          </Button>
-        </Paper>
       </Box>
     </Stack>
   );

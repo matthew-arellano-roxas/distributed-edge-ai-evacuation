@@ -3,6 +3,7 @@ import { logger } from '@root/config';
 import { rtdb } from '@root/config/firebase';
 import { MQTT_TOPICS } from './mqtt-topics';
 import type { EvacuationCommand } from '@/types/building-commands.types';
+import { patchDashboardOverviewBranch } from '@/services/dashboard-state-service';
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
@@ -65,9 +66,11 @@ export async function handleEvacuationCommand(
     await Promise.all([
       rtdb.ref(MQTT_TOPICS.EVACUATION_COMMAND).set(command),
       rtdb.ref(MQTT_TOPICS.EVACUATION_STATE).set(command),
+      patchDashboardOverviewBranch('evacuation', [], command),
     ]);
     logger.info('Successfully saved evacuation command', { topic, command });
   } catch (error) {
+    await patchDashboardOverviewBranch('evacuation', [], command);
     logger.error('Failed to save evacuation command', {
       error: error instanceof Error ? error.message : String(error),
       topic,

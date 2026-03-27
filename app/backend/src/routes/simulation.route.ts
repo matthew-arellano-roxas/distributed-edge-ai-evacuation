@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '@/middleware';
 import { db, rtdb } from '@root/config/firebase';
+import { clearDashboardStateCache } from '@/services/dashboard-state-service';
 
 const simulationRoute = Router();
 
@@ -35,6 +36,8 @@ simulationRoute.delete(
         }),
       );
     }
+
+    await clearDashboardStateCache();
 
     return res.status(200).json({
       cleared: true,

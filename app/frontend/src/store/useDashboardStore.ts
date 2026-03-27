@@ -1,13 +1,4 @@
-import { onValue, ref } from 'firebase/database';
-import {
-  collection,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-} from 'firebase/firestore';
 import { create } from 'zustand';
-import { database, firestore } from '../lib/firebase';
 import {
   controlElevator,
   getDashboardEvents,
@@ -15,6 +6,7 @@ import {
   resetSimulation,
   triggerEvacuation,
 } from '../lib/api';
+import { subscribeSocketEvent } from '../lib/socket';
 import type {
   DashboardEvent,
   DashboardOverview,
@@ -53,17 +45,6 @@ function formatError(error: unknown): string {
   return error instanceof Error ? error.message : 'Unknown error';
 }
 
-function withTimestamp(
-  overview: DashboardOverview,
-  patch: Partial<DashboardOverview>,
-): DashboardOverview {
-  return {
-    ...overview,
-    ...patch,
-    refreshedAt: new Date().toISOString(),
-  };
-}
-
 export const useDashboardStore = create<DashboardStore>((set) => ({
   events: [],
   eventsLoading: false,
@@ -78,28 +59,22 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
       overviewLoading: true,
       overviewError: null,
     });
+
+    let closed = false;
+    let socketCleanup: (() => void) | null = null;
     let fallbackInterval: ReturnType<typeof setInterval> | null = null;
-    let fallbackStarted = false;
 
-    const pendingKeys = new Set<string>();
-    const totalKeys = new Set([
-      'devices',
-      'latestDevices',
-      'sensors',
-      'occupancy',
-      'evacuation',
-      'elevators',
-    ]);
-
-    const loadOverviewFallback = async (): Promise<void> => {
+    const loadOverview = async (): Promise<void> => {
       try {
         const overview = await getDashboardOverview();
+        if (closed) return;
         set({
           overview,
           overviewLoading: false,
           overviewError: null,
         });
       } catch (error) {
+        if (closed) return;
         set({
           overviewError: formatError(error),
           overviewLoading: false,
@@ -107,56 +82,36 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
       }
     };
 
-    const startOverviewFallback = (): void => {
-      if (fallbackStarted) {
-        return;
+    void loadOverview();
+    fallbackInterval = setInterval(() => {
+      void loadOverview();
+    }, 5000);
+
+    void (async () => {
+      try {
+        socketCleanup = await subscribeSocketEvent<DashboardOverview>(
+          'dashboard:overview',
+          (overview) => {
+            if (closed) return;
+            set({
+              overview,
+              overviewLoading: false,
+              overviewError: null,
+            });
+          },
+        );
+      } catch (error) {
+        if (closed) return;
+        set({
+          overviewError: formatError(error),
+          overviewLoading: false,
+        });
       }
-
-      fallbackStarted = true;
-      void loadOverviewFallback();
-      fallbackInterval = setInterval(() => {
-        void loadOverviewFallback();
-      }, 3000);
-    };
-
-    const attachListener = (
-      key: keyof DashboardOverview,
-      path: string,
-    ): (() => void) =>
-      onValue(
-        ref(database, path),
-        (snapshot) => {
-          pendingKeys.add(key);
-          set((state) => ({
-            overview: withTimestamp(state.overview, {
-              [key]: snapshot.exists()
-                ? (snapshot.val() as Record<string, unknown>)
-                : null,
-            }),
-            overviewLoading: pendingKeys.size < totalKeys.size,
-            overviewError: null,
-          }));
-        },
-        (error) => {
-          startOverviewFallback();
-          set({
-            overviewError: formatError(error),
-            overviewLoading: false,
-          });
-        },
-      );
-
-    const unsubscribers = [
-      attachListener('devices', 'building/devices'),
-      attachListener('latestDevices', 'building/device_status'),
-      attachListener('sensors', 'building/sensors'),
-      attachListener('occupancy', 'building/occupancy'),
-      attachListener('evacuation', 'building/evacuation/state'),
-      attachListener('elevators', 'building/state'),
-    ];
+    })();
 
     return () => {
-      unsubscribers.forEach((unsubscribe) => unsubscribe());
+      closed = true;
+      socketCleanup?.();
       if (fallbackInterval) {
         clearInterval(fallbackInterval);
       }
@@ -167,18 +122,22 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
       eventsLoading: true,
       eventsError: null,
     });
-    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
-    let fallbackStarted = false;
 
-    const loadEventsFallback = async (): Promise<void> => {
+    let closed = false;
+    let socketCleanup: (() => void) | null = null;
+    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+
+    const loadEvents = async (): Promise<void> => {
       try {
         const response = await getDashboardEvents(20);
+        if (closed) return;
         set({
           events: response.events,
           eventsLoading: false,
           eventsError: null,
         });
       } catch (error) {
+        if (closed) return;
         set({
           eventsError: formatError(error),
           eventsLoading: false,
@@ -186,47 +145,36 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
       }
     };
 
-    const startEventsFallback = (): void => {
-      if (fallbackStarted) {
-        return;
-      }
+    void loadEvents();
+    fallbackInterval = setInterval(() => {
+      void loadEvents();
+    }, 7000);
 
-      fallbackStarted = true;
-      void loadEventsFallback();
-      fallbackInterval = setInterval(() => {
-        void loadEventsFallback();
-      }, 5000);
-    };
-
-    const unsubscribe = onSnapshot(
-      query(
-        collection(firestore, 'sensor_events'),
-        orderBy('createdAt', 'desc'),
-        limit(20),
-      ),
-      (snapshot) => {
-        const events = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...(doc.data() as Omit<DashboardEvent, 'id'>),
-        }));
-
-        set({
-          events,
-          eventsLoading: false,
-          eventsError: null,
-        });
-      },
-      (error) => {
-        startEventsFallback();
+    void (async () => {
+      try {
+        socketCleanup = await subscribeSocketEvent<DashboardEvent[]>(
+          'dashboard:events',
+          (events) => {
+            if (closed) return;
+            set({
+              events,
+              eventsLoading: false,
+              eventsError: null,
+            });
+          },
+        );
+      } catch (error) {
+        if (closed) return;
         set({
           eventsError: formatError(error),
           eventsLoading: false,
         });
-      },
-    );
+      }
+    })();
 
     return () => {
-      unsubscribe();
+      closed = true;
+      socketCleanup?.();
       if (fallbackInterval) {
         clearInterval(fallbackInterval);
       }
