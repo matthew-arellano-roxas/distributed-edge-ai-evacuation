@@ -55,7 +55,7 @@ export function AppLayout() {
                     Smart Building Monitor
                   </Typography>
                   <Typography variant="h5" sx={{ lineHeight: 1.05 }}>
-                    Simple live dashboard for fire, alerts, devices, controls, cameras, and occupancy
+                    Building status overview
                   </Typography>
                 </Box>
               </Stack>

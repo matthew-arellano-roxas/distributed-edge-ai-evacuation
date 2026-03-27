@@ -189,16 +189,6 @@ export function OverviewPage() {
 
   return (
     <Stack spacing={2.5}>
-      <Stack spacing={0.5}>
-        <Typography variant="overline" color="primary.main">
-          Dashboard
-        </Typography>
-        <Typography variant="h4">Simple building status display</Typography>
-        <Typography color="text.secondary">
-          Fire, alerts, devices, controls, cameras, and occupancy only.
-        </Typography>
-      </Stack>
-
       {overviewError ? <Alert severity="error">{overviewError}</Alert> : null}
       {eventsError ? <Alert severity="error">{eventsError}</Alert> : null}
 
