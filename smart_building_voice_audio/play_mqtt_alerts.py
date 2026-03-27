@@ -41,6 +41,12 @@ MQTT_EVACUATION_TOPIC = os.getenv("MQTT_EVACUATION_TOPIC", "building/command/eva
 MQTT_CLIENT_ID = os.getenv("MQTT_ALERT_AUDIO_CLIENT_ID", "mqtt-alert-audio-player")
 ALERT_COOLDOWN_SECONDS = float(os.getenv("ALERT_COOLDOWN_SECONDS", "8"))
 AUDIO_PLAYER = os.getenv("AUDIO_PLAYER", "").strip().lower()
+IGNORE_RETAINED_MESSAGES = os.getenv("IGNORE_RETAINED_MESSAGES", "true").strip().lower() in {
+    "true",
+    "1",
+    "yes",
+    "on",
+}
 
 DEFAULT_FIRE_MP3 = AUDIO_DIR / "fire_voice_line.mp3"
 FIRE_FIRST_FLOOR_MP3 = AUDIO_DIR / "fire_first_floor_voice_line.mp3"
@@ -205,6 +211,10 @@ def _on_connect(client, userdata, flags, rc, properties=None):
 
 
 def _on_message(client, userdata, msg):
+    if IGNORE_RETAINED_MESSAGES and msg.retain:
+        print(f"[AUDIO] Ignoring retained message on {msg.topic}")
+        return
+
     try:
         payload = json.loads(msg.payload.decode("utf-8"))
     except json.JSONDecodeError:
@@ -224,7 +234,7 @@ def _on_message(client, userdata, msg):
         print(f"[AUDIO] Missing audio file: {audio_file}", file=sys.stderr)
         return
 
-    dedupe_key = f"{msg.topic}:{audio_file.name}:{_extract_floor(payload) or '-'}"
+    dedupe_key = f"{audio_file.name}:{_extract_floor(payload) or '-'}"
     if _should_skip(dedupe_key):
         print(f"[AUDIO] Skipping duplicate alert for {audio_file.name}")
         return
