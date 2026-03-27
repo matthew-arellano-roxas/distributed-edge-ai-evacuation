@@ -165,6 +165,15 @@ cd smart_building_vision
 python yolo_detect.py --model my_model.pt --source usb0 --thresh 0.5 --resolution 640x480
 ```
 
+For Raspberry Pi webcam streaming with MediaMTX:
+
+```bash
+cd smart_building_vision
+chmod +x start_webcam_streams.sh run_yolo_webcams.sh
+./start_webcam_streams.sh
+./run_yolo_webcams.sh
+```
+
 Important:
 
 - the `smart_building_vision/train/` folder is ignored and will not be cloned

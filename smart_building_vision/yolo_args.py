@@ -7,7 +7,7 @@ def parse_args():
     parser.add_argument(
         "--source",
         required=True,
-        help='Use "usb0" for webcam, or pass a video/image file path.',
+        help='Use "usb0" for webcam, pass an RTSP/HTTP URL, or provide a video/image file path.',
     )
     parser.add_argument(
         "--thresh",

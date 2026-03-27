@@ -8,6 +8,9 @@ def parse_source(source):
     if source.startswith("usb"):
         return "usb", int(source[3:])
 
+    if source.startswith(("rtsp://", "rtmp://", "http://", "https://")):
+        return "stream", source
+
     if os.path.isfile(source):
         _, ext = os.path.splitext(source)
         ext = ext.lower()
