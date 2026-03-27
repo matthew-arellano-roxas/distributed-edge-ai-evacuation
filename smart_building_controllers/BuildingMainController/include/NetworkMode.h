@@ -1,3 +1,3 @@
 #pragma once
 
-#define USE_ETHERNET 
+#define USE_ETHERNET true
