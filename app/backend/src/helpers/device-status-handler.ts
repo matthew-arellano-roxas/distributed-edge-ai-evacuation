@@ -3,7 +3,7 @@ import { logger } from '@root/config';
 import { MQTT_TOPICS } from './mqtt-topics';
 import { patchDashboardOverviewBranch } from '@/services/dashboard-state-service';
 import type {
-  DeviceStatusFirebaseRecord,
+  DeviceStatusRecord,
   DeviceStatusMqttPayload,
 } from '@/types/device-status.types';
 
@@ -51,7 +51,7 @@ export async function handleDeviceStatus(
   }
 
   const now = Date.now();
-  const payload = omitUndefined<DeviceStatusFirebaseRecord>({
+  const payload = omitUndefined<DeviceStatusRecord>({
     ...data,
     deviceId,
     floor: floorKey,

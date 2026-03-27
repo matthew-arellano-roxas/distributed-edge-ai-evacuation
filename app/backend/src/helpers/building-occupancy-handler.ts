@@ -11,7 +11,6 @@ export type Occupancy = {
   movement: number; // Positive Negative
 };
 
-// Firebase
 export type StoredOccupancy = {
   occupancy: number;
 };

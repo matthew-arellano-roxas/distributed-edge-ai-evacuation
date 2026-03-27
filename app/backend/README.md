@@ -2,7 +2,7 @@
 
 Node.js and TypeScript backend for the smart building evacuation prototype.
 
-This service connects the application layer, MQTT broker, Redis-backed live state, and realtime control routes used during simulation and evacuation workflows.
+This service connects the application layer, MQTT broker, Redis-backed live state, and control routes used during simulation and evacuation workflows.
 
 ## What It Does
 
@@ -144,17 +144,15 @@ DELETE /simulation/reset
 Content-Type: application/json
 
 {
-  "target": "both"
+  "target": "cache"
 }
 ```
 
 Valid reset targets:
 
-- `realtime`
-- `firestore`
-- `both`
+- `cache`
 
-All reset targets clear the backend live-state cache in the current implementation.
+The reset route clears the backend live-state cache in the current implementation.
 
 ## Data Flow
 

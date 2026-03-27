@@ -6,7 +6,7 @@ import { clearDashboardStateCache } from '@/services/dashboard-state-service';
 const simulationRoute = Router();
 
 const resetSimulationSchema = z.object({
-  target: z.enum(['realtime', 'firestore', 'both']).default('both'),
+  target: z.enum(['cache']).default('cache'),
 });
 
 simulationRoute.delete(
@@ -16,7 +16,7 @@ simulationRoute.delete(
 
     if (!parsedBody.success) {
       return res.status(400).json({
-        error: 'target must be one of: realtime, firestore, both',
+        error: 'target must be cache',
       });
     }
 

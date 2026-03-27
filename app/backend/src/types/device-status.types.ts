@@ -7,7 +7,7 @@ export type DeviceStatusMqttPayload = {
   status: string | number;
 };
 
-export type DeviceStatusFirebaseRecord = DeviceStatusMqttPayload & {
+export type DeviceStatusRecord = DeviceStatusMqttPayload & {
   floor?: string | number;
   lastSeen?: number;
 };

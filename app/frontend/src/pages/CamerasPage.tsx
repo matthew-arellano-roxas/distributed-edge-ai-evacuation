@@ -37,38 +37,44 @@ const cameraConfigs: CameraConfig[] = [
 export function CamerasPage() {
   return (
     <Stack spacing={3}>
-      <div>
-        <Typography variant="overline" color="info.light">
-          Camera Access
+      <Stack spacing={0.75}>
+        <Typography variant="overline" color="secondary.main">
+          Cameras
         </Typography>
-        <Typography variant="h3">Stream endpoints</Typography>
-        <Typography color="text.secondary" sx={{ mt: 1, maxWidth: 720 }}>
-          These cards point at MediaMTX HLS streams for quick access from the
-          operations console.
+        <Typography variant="h4">Quick access to stream endpoints</Typography>
+        <Typography color="text.secondary" sx={{ maxWidth: 680 }}>
+          Compact cards for stream status and links, with wrapping that stays inside the layout.
         </Typography>
-      </div>
+      </Stack>
 
       <Grid container spacing={2}>
         {cameraConfigs.map((camera) => {
           const configured = camera.url.trim().length > 0;
 
           return (
-            <Grid key={camera.id} size={{ xs: 12, md: 4 }}>
+            <Grid key={camera.id} size={{ xs: 12, md: 6, xl: 4 }}>
               <Card sx={{ height: '100%' }}>
                 <CardContent>
                   <Stack spacing={2}>
                     <Stack direction="row" spacing={1} alignItems="center">
-                      <VideocamRoundedIcon color="primary" />
+                      <VideocamRoundedIcon color="secondary" />
                       <Typography variant="h6">{camera.label}</Typography>
                     </Stack>
+
                     {configured ? (
                       <Alert severity="success">Configured</Alert>
                     ) : (
                       <Alert severity="warning">Missing stream URL</Alert>
                     )}
-                    <Typography variant="body2" color="text.secondary">
-                      {camera.url || 'Add this value to app/frontend/.env'}
+
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ overflowWrap: 'anywhere' }}
+                    >
+                      {camera.url || 'Add the stream URL in the frontend environment config.'}
                     </Typography>
+
                     {configured ? (
                       <Button
                         variant="contained"

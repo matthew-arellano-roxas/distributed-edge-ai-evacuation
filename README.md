@@ -11,8 +11,8 @@ The system is designed to:
 - collect sensor readings such as flame, gas, temperature, and presence
 - track occupancy using computer vision and movement analysis
 - send evacuation commands to floor-level devices
-- keep live state in Firebase Realtime Database
-- store sensor event history in Firestore
+- keep live state in Redis through the backend cache
+- store recent sensor event history in Redis
 - expose backend routes for simulation and manual control
 
 ## Main Modules
@@ -24,8 +24,8 @@ The backend service is responsible for:
 - subscribing to MQTT topics
 - processing sensor, occupancy, elevator, and device-status messages
 - publishing evacuation and control commands
-- storing latest state in Firebase Realtime Database
-- storing sensor event history in Firestore
+- storing latest state in Redis-backed dashboard cache
+- storing recent sensor event history in Redis
 - exposing HTTP routes for simulation reset and control actions
 
 Backend documentation:
@@ -61,12 +61,11 @@ The computer vision module is used for:
 
 ### Backend Layer
 
-- the Node.js backend coordinates MQTT, API routes, Firebase, and simulation flows
+- the Node.js backend coordinates MQTT, API routes, Redis cache, and simulation flows
 
 ### Data Layer
 
-- Firebase Realtime Database stores latest live state
-- Firestore stores event-style records such as `sensor_events`
+- Redis stores latest live state and recent event history
 
 ## Example MQTT Topics
 
@@ -133,10 +132,6 @@ Create `app/backend/.env.development` and add your environment values:
 PORT=3000
 MQTT_URL=mqtt://localhost:1883
 REDIS_URL=redis://localhost:6379
-FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-FIREBASE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
-FIREBASE_DATABASE_URL=https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app/
 ```
 
 Start the backend:
@@ -188,9 +183,9 @@ pio run --target upload
 
 - MQTT subscriptions for sensor readings, device status, occupancy, and elevator state
 - evacuation trigger route
-- simulation reset route for Realtime Database, Firestore, or both
+- simulation reset route for backend cache
 - sensor alert generation for flame, gas, and high temperature
-- Firestore event logging for alert-worthy sensor events
+- Redis-backed event logging for alert-worthy sensor events
 
 ## Research Direction
 

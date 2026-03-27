@@ -31,4 +31,4 @@ export type EvacuationPayload = {
   targetFloors?: string[];
 };
 
-export type SimulationResetTarget = 'realtime' | 'firestore' | 'both';
+export type SimulationResetTarget = 'cache';

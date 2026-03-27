@@ -5,25 +5,44 @@
 
 :root {
   font-family: 'Roboto', sans-serif;
+  color: #1f2937;
+  background:
+    radial-gradient(circle at top left, rgba(22, 101, 52, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(29, 78, 216, 0.08), transparent 22%),
+    linear-gradient(180deg, #f6f2e8 0%, #efe7da 100%);
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 html {
-  background:
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.15), transparent 28%),
-    linear-gradient(180deg, #08111f 0%, #0f172a 100%);
+  background: var(--app-bg, #f4f1ea);
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: transparent;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+}
+
+img,
+video,
+svg,
+canvas {
+  max-width: 100%;
+  display: block;
 }
 
 #root {
   min-height: 100vh;
+  overflow-x: clip;
 }
