@@ -1,6 +1,5 @@
 import mqtt, { MqttClient } from 'mqtt';
 import { env, logger } from 'config';
-import { rtdb } from '@root/config/firebase';
 import {
   handleSensorReadings,
   subscribeToSensors,
@@ -26,6 +25,7 @@ import {
   handleEvacuationCommand,
   subscribeToEvacuationCommand,
 } from '@/helpers/evacuation-command-handler';
+import { getDashboardOverviewOrEmpty } from '@/services/dashboard-state-service';
 
 type JsonValue = unknown;
 type PublishOptions = {
@@ -76,14 +76,13 @@ class MqttService {
 
   private async replayPersistedState(): Promise<void> {
     const topicsToReplay = [MQTT_TOPICS.EVACUATION_COMMAND] as const;
+    const overview = await getDashboardOverviewOrEmpty();
+    const persistedState: Record<string, unknown> = {
+      [MQTT_TOPICS.EVACUATION_COMMAND]: overview.evacuation,
+    };
 
     for (const topic of topicsToReplay) {
-      const snapshot = await rtdb.ref(topic).get();
-      if (!snapshot.exists()) {
-        continue;
-      }
-
-      const payload = snapshot.val();
+      const payload = persistedState[topic];
       if (!payload || typeof payload !== 'object') {
         continue;
       }

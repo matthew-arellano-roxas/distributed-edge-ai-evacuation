@@ -250,7 +250,7 @@ export function LiveDataPage() {
           Live building activity
         </Typography>
         <Typography color="text.secondary" sx={{ maxWidth: 780, mt: 1 }}>
-          This page now normalizes your current Firebase data shape so floor sensors, room flame sensors, and raw snapshots can all show without changing backend topics.
+          This page normalizes the backend live-state cache so floor sensors, room flame sensors, and raw snapshots can all show without changing controller topics.
         </Typography>
       </div>
 
@@ -404,10 +404,10 @@ export function LiveDataPage() {
               <Card>
                 <CardContent>
                   <Typography variant="h6" sx={{ mb: 2 }}>
-                    Raw Firebase snapshots
+                    Raw backend snapshots
                   </Typography>
                   <Typography color="text.secondary" sx={{ mb: 2 }}>
-                    This keeps the current backend and controller contracts intact while still showing any shape that lands in Firebase.
+                    This keeps the current backend and controller contracts intact while still showing any shape that lands in the live cache.
                   </Typography>
                   <Grid container spacing={2}>
                     <Grid size={{ xs: 12, md: 6 }}>
@@ -536,7 +536,7 @@ export function LiveDataPage() {
                       <CardContent>
                         <Typography sx={{ fontWeight: 600 }}>No events yet</Typography>
                         <Typography color="text.secondary" sx={{ mt: 0.75 }}>
-                          Firestore is connected, but the `sensor_events` collection has not received any records yet.
+                          The backend event cache has not received any sensor events yet.
                         </Typography>
                       </CardContent>
                     </Card>

@@ -1,8 +1,10 @@
 import type { MqttClient } from 'mqtt';
 import { logger } from '@root/config';
-import { rtdb } from '@root/config/firebase';
 import { MQTT_TOPICS } from './mqtt-topics';
-import { patchDashboardOverviewBranch } from '@/services/dashboard-state-service';
+import {
+  getDashboardOverviewOrEmpty,
+  patchDashboardOverviewBranch,
+} from '@/services/dashboard-state-service';
 
 // MQTT
 export type Occupancy = {
@@ -46,30 +48,23 @@ async function saveFloorOccupancy(
   floor: string,
   movement: number,
 ): Promise<FloorOccupancy> {
-  const floorOccupancyRef = rtdb.ref(`${MQTT_TOPICS.OCCUPANCY}/${floor}`);
-  const snapshot = await floorOccupancyRef.get();
-  const currentData = snapshot.exists()
-    ? (snapshot.val() as Partial<FloorOccupancy>)
-    : null;
+  const overview = await getDashboardOverviewOrEmpty();
+  const currentData = (overview.occupancy?.[floor] as Partial<FloorOccupancy>) ?? null;
   const currentOccupancy = currentData?.occupancy ?? 0;
   const occupancy = nextOccupancyValue(currentOccupancy, movement);
 
   const payload = { floor, occupancy } as FloorOccupancy;
-  await floorOccupancyRef.set(payload);
   return payload;
 }
 
 async function saveTotalOccupancy(movement: number): Promise<StoredOccupancy> {
-  const baseRef = rtdb.ref(TOTAL_OCCUPANCY_PATH);
-  const snapshot = await baseRef.get();
-  const currentData = snapshot.exists()
-    ? (snapshot.val() as Partial<StoredOccupancy>)
-    : null;
+  const overview = await getDashboardOverviewOrEmpty();
+  const currentData =
+    (overview.occupancy?.summary as Partial<StoredOccupancy>) ?? null;
   const currentOccupancy = currentData?.occupancy ?? 0;
   const occupancy = nextOccupancyValue(currentOccupancy, movement);
 
   const payload = { occupancy } as StoredOccupancy;
-  await baseRef.set(payload);
   return payload;
 }
 

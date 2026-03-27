@@ -1,6 +1,5 @@
 import type { MqttClient } from 'mqtt';
 import { logger } from '@root/config';
-import { rtdb } from '@root/config/firebase';
 import { MQTT_TOPICS } from './mqtt-topics';
 import { patchDashboardOverviewBranch } from '@/services/dashboard-state-service';
 import type {
@@ -51,10 +50,6 @@ export async function handleDeviceStatus(
     return;
   }
 
-  const floorRef = rtdb.ref(
-    `${MQTT_TOPICS.DEVICE_STATUS_ROOT}/${floorKey}/${deviceId}`,
-  );
-  const latestRef = rtdb.ref(`building/device_status/${deviceId}`);
   const now = Date.now();
   const payload = omitUndefined<DeviceStatusFirebaseRecord>({
     ...data,
@@ -65,17 +60,14 @@ export async function handleDeviceStatus(
   });
 
   try {
-    await Promise.all([floorRef.set(payload), latestRef.set(payload)]);
     await Promise.all([
       patchDashboardOverviewBranch('devices', [floorKey, deviceId], payload),
       patchDashboardOverviewBranch('latestDevices', [deviceId], payload),
     ]);
-    logger.info('Successfully saved device status', {
+    logger.info('Successfully saved latest device status', {
       topic,
       deviceId,
       floor: floorKey,
-      floorPath: `${MQTT_TOPICS.DEVICE_STATUS_ROOT}/${floorKey}/${deviceId}`,
-      latestPath: `building/device_status/${deviceId}`,
       payload,
     });
   } catch (error) {

@@ -1,6 +1,5 @@
 import type { MqttClient } from 'mqtt';
 import { logger } from '@root/config';
-import { rtdb } from '@root/config/firebase';
 import { MQTT_TOPICS } from './mqtt-topics';
 import type { EvacuationCommand } from '@/types/building-commands.types';
 import { patchDashboardOverviewBranch } from '@/services/dashboard-state-service';
@@ -63,12 +62,8 @@ export async function handleEvacuationCommand(
   }
 
   try {
-    await Promise.all([
-      rtdb.ref(MQTT_TOPICS.EVACUATION_COMMAND).set(command),
-      rtdb.ref(MQTT_TOPICS.EVACUATION_STATE).set(command),
-      patchDashboardOverviewBranch('evacuation', [], command),
-    ]);
-    logger.info('Successfully saved evacuation command', { topic, command });
+    await patchDashboardOverviewBranch('evacuation', [], command);
+    logger.info('Successfully saved evacuation command state', { topic, command });
   } catch (error) {
     await patchDashboardOverviewBranch('evacuation', [], command);
     logger.error('Failed to save evacuation command', {

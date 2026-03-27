@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '@/middleware';
-import { db, rtdb } from '@root/config/firebase';
 import { clearDashboardStateCache } from '@/services/dashboard-state-service';
 
 const simulationRoute = Router();
@@ -22,20 +21,6 @@ simulationRoute.delete(
     }
 
     const { target } = parsedBody.data;
-
-    if (target === 'realtime' || target === 'both') {
-      await rtdb.ref().remove();
-    }
-
-    if (target === 'firestore' || target === 'both') {
-      const collections = await db.listCollections();
-
-      await Promise.all(
-        collections.map(async (collection) => {
-          await db.recursiveDelete(collection);
-        }),
-      );
-    }
 
     await clearDashboardStateCache();
 

@@ -91,8 +91,8 @@ export function OverviewPage() {
             Smart building control center
           </Typography>
           <Typography color="text.secondary" sx={{ maxWidth: 720, mt: 1 }}>
-            Live data comes straight from Firebase in the browser, while command
-            actions stay on backend APIs where they belong.
+            Live data now flows through the backend cache and Socket.IO, so the
+            dashboard stays usable across your LAN without browser-side Firebase setup.
           </Typography>
         </div>
         <Stack
@@ -155,7 +155,7 @@ export function OverviewPage() {
               {hasAnyOverviewData ? (
                 <>
                   <Typography color="text.secondary" sx={{ mb: 2 }}>
-                    Realtime Database paths:
+                    Backend state branches:
                   </Typography>
                   <Stack spacing={1}>
                     <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>`building/devices`</Typography>
@@ -166,16 +166,15 @@ export function OverviewPage() {
                     <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>`building/state`</Typography>
                   </Stack>
                   <Typography color="text.secondary" sx={{ mt: 3, mb: 1 }}>
-                    Firestore collection:
+                    Event stream:
                   </Typography>
-                  <Typography variant="body2">`sensor_events`</Typography>
+                  <Typography variant="body2">`dashboard events cache`</Typography>
                 </>
               ) : (
                 <Stack spacing={1.5}>
                   <Typography color="text.secondary">
-                    Firebase is connected, but there are no incoming device,
-                    sensor, occupancy, evacuation, elevator, or event records
-                    yet.
+                    The backend is connected, but there are no incoming device,
+                    sensor, occupancy, evacuation, elevator, or event records yet.
                   </Typography>
                   <Typography color="text.secondary">
                     Once your ESP32s, Raspberry Pis, or backend start writing
@@ -195,13 +194,13 @@ export function OverviewPage() {
               </Typography>
               <Stack spacing={1.5}>
                 <Typography variant="body2" color="text.secondary">
-                  Firebase overview:
+                  Backend overview:
                 </Typography>
                 <Typography>
                   {overviewLoading ? 'Connecting...' : 'Connected'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Firestore events:
+                  Event stream:
                 </Typography>
                 <Typography>{eventsError ? 'Error' : 'Connected'}</Typography>
                 <Typography variant="body2" color="text.secondary">

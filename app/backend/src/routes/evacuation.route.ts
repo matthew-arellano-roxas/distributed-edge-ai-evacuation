@@ -4,8 +4,8 @@ import { pubSub } from 'config';
 import { AppError } from '@/errors/AppError';
 import { asyncHandler } from '@/middleware';
 import type { EvacuationCommand } from '@/types/building-commands.types';
-import { rtdb } from '@root/config/firebase';
 import { MQTT_TOPICS } from '@/helpers/mqtt-topics';
+import { patchDashboardOverviewBranch } from '@/services/dashboard-state-service';
 
 const evacuationRoute = Router();
 
@@ -46,10 +46,7 @@ evacuationRoute.post(
       retain: true,
     });
 
-    await Promise.all([
-      rtdb.ref(MQTT_TOPICS.EVACUATION_COMMAND).set(command),
-      rtdb.ref(MQTT_TOPICS.EVACUATION_STATE).set(command),
-    ]);
+    await patchDashboardOverviewBranch('evacuation', [], command);
 
     return res.status(202).json({
       topic: MQTT_TOPICS.EVACUATION_COMMAND,

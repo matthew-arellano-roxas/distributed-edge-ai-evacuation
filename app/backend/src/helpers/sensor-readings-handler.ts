@@ -6,11 +6,11 @@ import type {
 } from '@/types/sensor-payload.types';
 import { pubSub } from '@root/config';
 import { logger } from '@root/config';
-import { db, rtdb } from '@root/config/firebase';
 import { MqttClient } from 'mqtt/*';
 import { EvacuationCommand } from '@/types/building-commands.types';
 import { MQTT_TOPICS } from '@/helpers/mqtt-topics';
 import {
+  getDashboardOverviewOrEmpty,
   patchDashboardOverviewBranch,
   pushDashboardEvent,
 } from '@/services/dashboard-state-service';
@@ -136,35 +136,16 @@ async function createSensorEvent(params: {
     createdAt: new Date().toISOString(),
   };
 
-  try {
-    const doc = await db.collection('sensor_events').add({
-      floor: event.floor,
-      placeId: event.placeId,
-      sensorType: event.sensorType,
-      eventType: event.eventType,
-      message: event.message,
-      data: event.data,
-      createdAt: event.createdAt,
-    });
-    await pushDashboardEvent({ ...event, id: doc.id });
-  } catch (error) {
-    await pushDashboardEvent(event);
-    logger.warn('Failed to save sensor event to Firestore, cached event only', {
-      error: error instanceof Error ? error.message : String(error),
-      eventType: event.eventType,
-      floor: event.floor,
-      placeId: event.placeId,
-    });
-  }
+  await pushDashboardEvent(event);
 }
 
 async function getTargetFloors(sourceFloor: string): Promise<string[]> {
-  const snapshot = await rtdb.ref(MQTT_TOPICS.DEVICE_STATUS_ROOT).get();
-  if (!snapshot.exists()) {
+  const overview = await getDashboardOverviewOrEmpty();
+  if (!overview.devices) {
     return [];
   }
 
-  const value = snapshot.val() as Record<
+  const value = overview.devices as Record<
     string,
     Record<string, PersistedDeviceStatus> | undefined
   >;
@@ -196,8 +177,7 @@ async function persistEvacuationCommand(
 ): Promise<void> {
   await Promise.all([
     pubSub.publish(MQTT_TOPICS.EVACUATION_COMMAND, command, { retain: true }),
-    rtdb.ref(MQTT_TOPICS.EVACUATION_COMMAND).set(command),
-    rtdb.ref(MQTT_TOPICS.EVACUATION_STATE).set(command),
+    patchDashboardOverviewBranch('evacuation', [], command),
   ]);
 }
 
@@ -222,7 +202,6 @@ export async function handleSensorReadings(
     return;
   }
   const rtdbPath = getSensorRtdbPath(floor, placeId, sensorType);
-  const ref = rtdb.ref(rtdbPath);
   logger.info('Handling sensor payload', {
     topic,
     floor,
@@ -279,7 +258,7 @@ export async function handleSensorReadings(
         message,
         data: normalized,
       });
-      logger.info('Created Firestore sensor event for flame detection', {
+      logger.info('Created cached sensor event for flame detection', {
         topic,
         placeId,
         floor,
@@ -314,7 +293,7 @@ export async function handleSensorReadings(
         message,
         data: normalized,
       });
-      logger.info('Created Firestore sensor event for gas detection', {
+      logger.info('Created cached sensor event for gas detection', {
         topic,
         placeId,
         floor,
@@ -350,25 +329,24 @@ export async function handleSensorReadings(
         message,
         data: normalized,
       });
-      logger.info('Created Firestore sensor event for temperature threshold', {
+      logger.info('Created cached sensor event for temperature threshold', {
         topic,
         placeId,
         floor,
       });
     }
 
-    logger.info('Attempting RTDB sensor write', {
+    logger.info('Updating latest sensor state', {
       topic,
       rtdbPath,
       normalized,
     });
-    await ref.set(normalized);
     await patchDashboardOverviewBranch(
       'sensors',
       rtdbPath.replace(`${MQTT_TOPICS.SENSOR_READINGS}/`, '').split('/'),
       normalized,
     );
-    logger.info('Saved sensor payload to RTDB', {
+    logger.info('Saved latest sensor payload to dashboard state', {
       topic,
       floor,
       placeId,

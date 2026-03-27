@@ -25,7 +25,7 @@ const DASHBOARD_OVERVIEW_KEY = 'dashboard:overview';
 const DASHBOARD_EVENTS_KEY = 'dashboard:events';
 const DASHBOARD_EVENT_LIMIT = 20;
 
-function emptyOverview(): DashboardOverview {
+export function emptyOverview(): DashboardOverview {
   return {
     devices: null,
     latestDevices: null,
@@ -91,6 +91,10 @@ export async function getCachedDashboardOverview(): Promise<DashboardOverview | 
   return readJson<DashboardOverview>(DASHBOARD_OVERVIEW_KEY);
 }
 
+export async function getDashboardOverviewOrEmpty(): Promise<DashboardOverview> {
+  return (await getCachedDashboardOverview()) ?? emptyOverview();
+}
+
 export async function setCachedDashboardOverview(
   overview: DashboardOverview,
 ): Promise<void> {
@@ -116,6 +120,21 @@ export async function patchDashboardOverviewBranch(
   const nextOverview: DashboardOverview = {
     ...current,
     [key]: nextBranch,
+    refreshedAt: new Date().toISOString(),
+  };
+
+  await writeJson(DASHBOARD_OVERVIEW_KEY, nextOverview);
+  emitSocketEvent('dashboard:overview', nextOverview);
+}
+
+export async function replaceDashboardOverviewBranch(
+  key: keyof Omit<DashboardOverview, 'refreshedAt'>,
+  value: Record<string, unknown> | null,
+): Promise<void> {
+  const current = await getDashboardOverviewOrEmpty();
+  const nextOverview: DashboardOverview = {
+    ...current,
+    [key]: value,
     refreshedAt: new Date().toISOString(),
   };
 
