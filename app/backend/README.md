@@ -2,13 +2,13 @@
 
 Node.js and TypeScript backend for the smart building evacuation prototype.
 
-This service connects the application layer, MQTT broker, Redis-backed live state, and control routes used during simulation and evacuation workflows.
+This service connects the application layer, MQTT broker, Firebase, and realtime control routes used during simulation and evacuation workflows.
 
 ## What It Does
 
 - subscribes to MQTT sensor, occupancy, elevator, and device-status topics
-- stores latest sensor, device, occupancy, evacuation, and elevator state in Redis
-- stores recent sensor event history in Redis
+- stores latest sensor and device state in Firebase Realtime Database
+- stores sensor event history in Firestore
 - exposes HTTP routes for evacuation commands, elevator state, and simulation reset
 - publishes MQTT commands and alerts for evacuation-related actions
 
@@ -18,6 +18,7 @@ This service connects the application layer, MQTT broker, Redis-backed live stat
 - TypeScript
 - Express
 - MQTT
+- Firebase Admin SDK
 - Redis
 - Socket.IO
 - Zod
@@ -27,7 +28,7 @@ This service connects the application layer, MQTT broker, Redis-backed live stat
 
 ```text
 app/backend/
-|-- config/                 # Environment loading, Redis, logger, MQTT wrapper
+|-- config/                 # Environment loading, Firebase, Redis, logger, MQTT wrapper
 |-- src/
 |   |-- commands/           # Shared command types and topic constants
 |   |-- errors/             # App-specific error classes
@@ -53,13 +54,17 @@ Required values:
 PORT=3000
 MQTT_URL=mqtt://localhost:1883
 REDIS_URL=redis://127.0.0.1:6379
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+FIREBASE_CLIENT_EMAIL=your-service-account@project.iam.gserviceaccount.com
+FIREBASE_DATABASE_URL=https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app/
 ```
 
 Optional:
 
 ```env
 NODE_ENV=development
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8080
+ALLOWED_ORIGINS=http://localhost:5173
 MQTT_USERNAME=
 MQTT_PASSWORD=
 ```
@@ -112,14 +117,13 @@ Examples of active topic groups:
 - `building/sensors/{floor}/{placeId}/{sensorType}`
 - `building/devices/{floor}/{deviceId}`
 - `building/occupancy/{floor}`
-- `building/state/{floor}/elevator`
-- `building/control/{floor}/{component}`
-- `building/command/evacuation`
+- `building/elevator`
+- `building/evacuation/actions`
 - `building/evacuation/alerts`
 
 ## HTTP Routes
 
-- `POST /elevator/control`
+- `POST /elevator/state`
 - `POST /evacuation/trigger`
 - `DELETE /simulation/reset`
 
@@ -130,10 +134,8 @@ POST /evacuation/trigger
 Content-Type: application/json
 
 {
-  "evacuationMode": true,
-  "sourceFloor": "floor1",
-  "sourceLocation": "room101",
-  "targetFloors": ["floor2", "floor3"]
+  "openDoors": true,
+  "soundAlert": true
 }
 ```
 
@@ -144,26 +146,27 @@ DELETE /simulation/reset
 Content-Type: application/json
 
 {
-  "target": "cache"
+  "target": "both"
 }
 ```
 
 Valid reset targets:
 
-- `cache`
-
-The reset route clears the backend live-state cache in the current implementation.
+- `realtime`
+- `firestore`
+- `both`
 
 ## Data Flow
 
 1. Devices publish MQTT messages.
 2. The backend receives and routes messages through `MqttService`.
-3. Handlers persist current state into the Redis-backed dashboard cache.
-4. Alert-worthy sensor readings also append recent event records in the cache.
+3. Handlers persist current state to Firebase Realtime Database.
+4. Alert-worthy sensor readings also create Firestore `sensor_events` records.
 5. Routes can publish manual evacuation and control commands back to MQTT.
 
 ## Notes
 
-- latest device and sensor state are stored in Redis-backed dashboard state
-- recent event-style history is stored in Redis-backed dashboard state
+- latest device and sensor state are stored in Realtime Database
+- event-style history is stored in Firestore
 - device connectivity uses heartbeat and `lastSeen`
+

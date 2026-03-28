@@ -1,27 +1,54 @@
 # Stage 1: Build
-FROM node:22-slim AS builder
-WORKDIR /app
+FROM node:20-alpine AS builder
 
+# Set working directory
+WORKDIR /usr/src/app
+
+# Copy package.json and package-lock.json first for caching
 COPY package*.json ./
-RUN npm ci
 
+# Install all dependencies (including devDependencies for TypeScript build)
+RUN npm install
+
+# Copy source files
 COPY . .
+
+# Compile TypeScript
 RUN npm run build
 
-# Stage 2: Run
-FROM node:22-slim
-WORKDIR /app
+# Stage 2: Production
+FROM node:20-alpine
 
-# Set to production to optimize libraries like Express
-ENV NODE_ENV=production
+WORKDIR /usr/src/app
 
-# Only copy the compiled files and production-only dependencies
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/dist ./dist
-RUN npm ci --only=production
+# Copy compiled files from builder stage
+COPY --from=builder /usr/src/app/dist ./dist
 
-# Use a non-root user for security
-USER node
+# Copy package files
+COPY package*.json ./
 
+# Install only production dependencies
+RUN npm install --production
+
+# Expose port (adjust if needed)
 EXPOSE 3000
+
+# Start the app
 CMD ["node", "dist/src/server.js"]
+
+
+# Simple Node.js Dockerfile
+
+# FROM node:18
+
+# WORKDIR /usr/src/app
+
+# COPY . . 
+
+# RUN npm install
+
+# RUN npm run build
+
+# EXPOSE 3000
+
+# CMD ["node", "dist/src/server.js"]

@@ -4,12 +4,8 @@ const init = () => {
   mqttService.init();
 };
 
-const publish = (
-  topic: string,
-  payload: object,
-  options?: { retain?: boolean },
-) => {
-  return mqttService.publish(topic, payload, options);
+const publish = (topic: string, payload: object) => {
+  return mqttService.publish(topic, payload);
 };
 
 export const pubSub = {

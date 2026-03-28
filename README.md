@@ -11,8 +11,8 @@ The system is designed to:
 - collect sensor readings such as flame, gas, temperature, and presence
 - track occupancy using computer vision and movement analysis
 - send evacuation commands to floor-level devices
-- keep live state in Redis through the backend cache
-- store recent sensor event history in Redis
+- keep live state in Firebase Realtime Database
+- store sensor event history in Firestore
 - expose backend routes for simulation and manual control
 
 ## Main Modules
@@ -24,14 +24,14 @@ The backend service is responsible for:
 - subscribing to MQTT topics
 - processing sensor, occupancy, elevator, and device-status messages
 - publishing evacuation and control commands
-- storing latest state in Redis-backed dashboard cache
-- storing recent sensor event history in Redis
+- storing latest state in Firebase Realtime Database
+- storing sensor event history in Firestore
 - exposing HTTP routes for simulation reset and control actions
 
 Backend documentation:
 [app/backend/README.md](app/backend/README.md)
 
-### `smart_building_controllers`
+### `evacuation_controller`
 
 The ESP32 controller project is used for floor-level device behavior, including:
 
@@ -47,13 +47,6 @@ The computer vision module is used for:
 - movement and occupancy tracking
 - edge-assisted monitoring workflows
 
-### `raspberry_pi_announcer`
-
-The Raspberry Pi announcer service is used for:
-
-- subscribing to MQTT evacuation alerts
-- speaking alerts through the Pi audio output or Bluetooth speaker
-
 ## Architecture
 
 ### Device Layer
@@ -68,11 +61,12 @@ The Raspberry Pi announcer service is used for:
 
 ### Backend Layer
 
-- the Node.js backend coordinates MQTT, API routes, Redis cache, and simulation flows
+- the Node.js backend coordinates MQTT, API routes, Firebase, and simulation flows
 
 ### Data Layer
 
-- Redis stores latest live state and recent event history
+- Firebase Realtime Database stores latest live state
+- Firestore stores event-style records such as `sensor_events`
 
 ## Example MQTT Topics
 
@@ -91,7 +85,7 @@ building/devices/2/esp32-temp-01
 Evacuation action:
 
 ```text
-building/command/evacuation
+building/evacuation/actions
 ```
 
 ## Repository Structure
@@ -99,11 +93,9 @@ building/command/evacuation
 ```text
 .
 |-- app/
-|   |-- backend/
-|   `-- frontend/
-|-- smart_building_controllers/
+|   `-- backend/
+|-- evacuation_controller/
 |-- smart_building_vision/
-|-- raspberry_pi_announcer/
 |-- docker-compose.yaml
 `-- README.md
 ```
@@ -140,6 +132,10 @@ Create `app/backend/.env.development` and add your environment values:
 PORT=3000
 MQTT_URL=mqtt://localhost:1883
 REDIS_URL=redis://localhost:6379
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+FIREBASE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+FIREBASE_DATABASE_URL=https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app/
 ```
 
 Start the backend:
@@ -165,22 +161,13 @@ cd smart_building_vision
 python yolo_detect.py --model my_model.pt --source usb0 --thresh 0.5 --resolution 640x480
 ```
 
-For Raspberry Pi webcam streaming with MediaMTX:
-
-```bash
-cd smart_building_vision
-chmod +x start_webcam_streams.sh run_yolo_webcams.sh
-./start_webcam_streams.sh
-./run_yolo_webcams.sh
-```
-
 Important:
 
 - the `smart_building_vision/train/` folder is ignored and will not be cloned
 - model files such as `.pt` may also be ignored depending on your `.gitignore`
 - if the Raspberry Pi needs a model file for inference, copy that model separately after cloning
 
-### 5. Set up the ESP32 controllers
+### 5. Set up the ESP32 controller
 
 Requirements:
 
@@ -191,7 +178,7 @@ Requirements:
 Basic workflow:
 
 ```bash
-cd smart_building_controllers/BuildingMainController
+cd evacuation_controller
 pio run
 pio run --target upload
 ```
@@ -200,9 +187,9 @@ pio run --target upload
 
 - MQTT subscriptions for sensor readings, device status, occupancy, and elevator state
 - evacuation trigger route
-- simulation reset route for backend cache
+- simulation reset route for Realtime Database, Firestore, or both
 - sensor alert generation for flame, gas, and high temperature
-- Redis-backed event logging for alert-worthy sensor events
+- Firestore event logging for alert-worthy sensor events
 
 ## Research Direction
 

@@ -1,10 +1,15 @@
 export interface FlamePayload {
   type: 'flame';
   detected: boolean;
-  intensity: number;
   deviceId: string;
   updatedAt: string;
-  location?: string;
+}
+
+export interface PresencePayload {
+  type: 'presence';
+  detected: boolean;
+  deviceId: string;
+  updatedAt: string;
 }
 
 export interface TemperaturePayload {
@@ -13,7 +18,6 @@ export interface TemperaturePayload {
   unit: string;
   deviceId: string;
   updatedAt: string;
-  humidity?: number;
 }
 
 export interface MQ2Payload {

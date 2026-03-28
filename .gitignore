@@ -13,8 +13,6 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
-secrets/
-*firebase-service-account*.json
 
 # build
 dist/

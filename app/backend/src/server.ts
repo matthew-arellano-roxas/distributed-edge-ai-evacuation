@@ -8,29 +8,11 @@ import { connectRedis, getRedisClient, initSocketServer } from 'config';
 import elevatorRoute from '@/routes/elevator.route';
 import evacuationRoute from '@/routes/evacuation.route';
 import simulationRoute from '@/routes/simulation.route';
-import dashboardRoute from '@/routes/dashboard.route';
 
 const app = express();
 const httpServer = createServer(app);
 
 initSocketServer(httpServer);
-
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-
-  res.header(
-    'Access-Control-Allow-Methods',
-    'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-  );
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(204);
-  }
-
-  next();
-});
-
 app.use(express.json());
 pubSub.init();
 
@@ -39,7 +21,6 @@ app.use(requestLogger);
 app.use(elevatorRoute);
 app.use(evacuationRoute);
 app.use(simulationRoute);
-app.use(dashboardRoute);
 app.get('/health', (_req, res) => {
   res.status(200).json({ ok: true });
 });

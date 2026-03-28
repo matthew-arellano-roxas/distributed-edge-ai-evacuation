@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '@/middleware';
-import { clearDashboardStateCache } from '@/services/dashboard-state-service';
+import { db, rtdb } from '@root/config/firebase';
 
 const simulationRoute = Router();
 
 const resetSimulationSchema = z.object({
-  target: z.enum(['cache']).default('cache'),
+  target: z.enum(['realtime', 'firestore', 'both']).default('both'),
 });
 
 simulationRoute.delete(
@@ -16,13 +16,25 @@ simulationRoute.delete(
 
     if (!parsedBody.success) {
       return res.status(400).json({
-        error: 'target must be cache',
+        error: 'target must be one of: realtime, firestore, both',
       });
     }
 
     const { target } = parsedBody.data;
 
-    await clearDashboardStateCache();
+    if (target === 'realtime' || target === 'both') {
+      await rtdb.ref().remove();
+    }
+
+    if (target === 'firestore' || target === 'both') {
+      const collections = await db.listCollections();
+
+      await Promise.all(
+        collections.map(async (collection) => {
+          await db.recursiveDelete(collection);
+        }),
+      );
+    }
 
     return res.status(200).json({
       cleared: true,

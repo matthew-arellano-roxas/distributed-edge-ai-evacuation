@@ -9,9 +9,9 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
 
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: '*',
+      origin: env.ALLOWED_ORIGINS,
       methods: ['GET', 'POST'],
-      credentials: false,
+      credentials: true,
     },
   });
 

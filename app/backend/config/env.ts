@@ -49,4 +49,8 @@ export const env = {
   MQTT_PASSWORD: process.env.MQTT_PASSWORD ?? '',
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   ALLOWED_ORIGINS: parseAllowedOrigins(),
+  FIREBASE_PROJECT_ID: requireEnv('FIREBASE_PROJECT_ID'),
+  FIREBASE_PRIVATE_KEY: requireEnv('FIREBASE_PRIVATE_KEY'),
+  FIREBASE_CLIENT_EMAIL: requireEnv('FIREBASE_CLIENT_EMAIL'),
+  FIREBASE_DATABASE_URL: requireEnv('FIREBASE_DATABASE_URL'),
 };
