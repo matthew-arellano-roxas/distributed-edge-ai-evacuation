@@ -1,4 +1,13 @@
 services:
+  mediamtx:
+    container_name: mediamtx
+    image: bluenviron/mediamtx
+    restart: unless-stopped
+    ports:
+      - "8554:8554"
+      - "8888:8888"
+      - "8889:8889"
+
   mqtt:
     container_name: mqtt
     image: eclipse-mosquitto:2
@@ -20,7 +29,7 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
+  backend:
     container_name: backend
     build:
       context: ./app/backend
@@ -34,15 +43,28 @@ services:
       MQTT_URL: ${MQTT_URL:-mqtt://mqtt:1883}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
-      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
-      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
-      FIREBASE_DATABASE_URL: ${FIREBASE_DATABASE_URL}
     depends_on:
       mqtt:
         condition: service_started
       redis:
         condition: service_healthy
+
+  frontend:
+    container_name: frontend
+    build:
+      context: ./app/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
+        VITE_CAMERA_PI5_CAM1_HLS_URL: ${VITE_CAMERA_PI5_CAM1_HLS_URL:-http://localhost:8888/pi5-cam-1/index.m3u8}
+        VITE_CAMERA_PI5_CAM2_HLS_URL: ${VITE_CAMERA_PI5_CAM2_HLS_URL:-http://localhost:8888/pi5-cam-2/index.m3u8}
+        VITE_CAMERA_PIZERO_CAM1_HLS_URL: ${VITE_CAMERA_PIZERO_CAM1_HLS_URL:-http://localhost:8888/pizero-cam-1/index.m3u8}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_started
 
 volumes:
   redis_data:
