@@ -1,9 +1,11 @@
 import json
 import os
+import queue
 import socket
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -40,6 +42,7 @@ MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 MQTT_ANNOUNCEMENT_TOPIC = os.getenv("MQTT_ANNOUNCEMENT_TOPIC", "building/evacuation/alerts")
 MQTT_EVACUATION_TOPIC = os.getenv("MQTT_EVACUATION_TOPIC", "building/command/evacuation")
 MQTT_CLIENT_ID = os.getenv("MQTT_ALERT_AUDIO_CLIENT_ID", "mqtt-alert-audio-player")
+MQTT_EXACT_CLIENT_ID = os.getenv("MQTT_ALERT_AUDIO_EXACT_CLIENT_ID", "").strip()
 MQTT_KEEPALIVE_SECONDS = int(os.getenv("MQTT_KEEPALIVE_SECONDS", "60"))
 MQTT_RECONNECT_MIN_DELAY_SECONDS = int(os.getenv("MQTT_RECONNECT_MIN_DELAY_SECONDS", "1"))
 MQTT_RECONNECT_MAX_DELAY_SECONDS = int(os.getenv("MQTT_RECONNECT_MAX_DELAY_SECONDS", "30"))
@@ -61,13 +64,22 @@ TEMPERATURE_MP3 = AUDIO_DIR / "temperature_rising_voice_line.mp3"
 SMOKE_MP3 = AUDIO_DIR / "smoke_voice_line.mp3"
 
 _last_played_at = {}
+_playback_queue = queue.Queue()
+
+
+def _clean_env_value(value, default=""):
+    if value is None:
+        return default
+    cleaned = str(value).strip().strip('"').strip("'")
+    return cleaned if cleaned else default
 
 
 def _build_client_id():
-    configured = MQTT_CLIENT_ID.strip()
-    if configured:
-        return configured
-    return f"mqtt-alert-audio-player-{socket.gethostname()}"
+    if MQTT_EXACT_CLIENT_ID:
+        return MQTT_EXACT_CLIENT_ID
+
+    configured = MQTT_CLIENT_ID.strip() or "mqtt-alert-audio-player"
+    return f"{configured}-{socket.gethostname()}"
 
 
 def _normalize_floor(value):
@@ -199,6 +211,15 @@ def _play_mp3(path):
         )
 
 
+def _playback_worker():
+    while True:
+        path = _playback_queue.get()
+        try:
+            _play_mp3(path)
+        finally:
+            _playback_queue.task_done()
+
+
 def _should_skip(key):
     now = time.monotonic()
     last_time = _last_played_at.get(key)
@@ -268,22 +289,41 @@ def _on_message(client, userdata, msg):
         print(f"[AUDIO] Skipping duplicate alert for {audio_file.name}")
         return
 
-    print(f"[AUDIO] Playing {audio_file.name} for topic {msg.topic}")
-    _play_mp3(audio_file)
+    print(f"[AUDIO] Queueing {audio_file.name} for topic {msg.topic}")
+    _playback_queue.put(audio_file)
 
 
 def main():
     if mqtt is None:
         raise RuntimeError("paho-mqtt is not installed. Run: python -m pip install paho-mqtt")
 
+    mqtt_host = _clean_env_value(MQTT_HOST, "")
+    if not mqtt_host:
+        raise RuntimeError(
+            "MQTT_HOST is missing. Set MQTT_HOST in smart_building_voice_audio/.env "
+            "or export it before running the script."
+        )
+
+    try:
+        mqtt_port = int(_clean_env_value(MQTT_PORT, "1883"))
+    except ValueError as exc:
+        raise RuntimeError(
+            "MQTT_PORT is invalid. Set MQTT_PORT to a numeric value in "
+            "smart_building_voice_audio/.env."
+        ) from exc
+
+    playback_thread = threading.Thread(target=_playback_worker, daemon=True)
+    playback_thread.start()
+
     client_id = _build_client_id()
     if hasattr(mqtt, "CallbackAPIVersion"):
         client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=client_id,
+            clean_session=True,
         )
     else:
-        client = mqtt.Client(client_id=client_id)
+        client = mqtt.Client(client_id=client_id, clean_session=True)
 
     if MQTT_USERNAME:
         client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
@@ -297,11 +337,14 @@ def main():
     client.on_message = _on_message
 
     print(
-        f"[AUDIO] Connecting to MQTT broker at {MQTT_HOST}:{MQTT_PORT} "
+        f"[AUDIO] Connecting to MQTT broker at {mqtt_host}:{mqtt_port} "
         f"with client id '{client_id}' ..."
     )
-    client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=MQTT_KEEPALIVE_SECONDS)
-    client.loop_forever()
+    client.connect_async(mqtt_host, mqtt_port, keepalive=MQTT_KEEPALIVE_SECONDS)
+    try:
+        client.loop_forever(retry_first_connection=True)
+    except TypeError:
+        client.loop_forever()
 
 
 if __name__ == "__main__":
