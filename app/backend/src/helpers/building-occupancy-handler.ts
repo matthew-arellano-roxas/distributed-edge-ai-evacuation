@@ -1,22 +1,26 @@
 import type { MqttClient } from 'mqtt';
 import { logger } from '@root/config';
-import { rtdb } from '@root/config/firebase';
 import { MQTT_TOPICS } from './mqtt-topics';
+import {
+  getDashboardOverviewOrEmpty,
+  patchDashboardOverviewBranch,
+} from '@/services/dashboard-state-service';
 
 // MQTT
 export type Occupancy = {
   movement: number; // Positive Negative
 };
 
-// Firebase
 export type StoredOccupancy = {
-  total_occupancy: number;
+  occupancy: number;
 };
 
 export type FloorOccupancy = {
   floor: string;
   occupancy: number;
 };
+
+const TOTAL_OCCUPANCY_PATH = `${MQTT_TOPICS.OCCUPANCY}/summary`;
 
 function parseFloorFromTopic(topic: string): string | null {
   const [, , floor] = topic.split('/');
@@ -42,28 +46,43 @@ function nextOccupancyValue(currentValue: number, movement: number): number {
 async function saveFloorOccupancy(
   floor: string,
   movement: number,
-): Promise<void> {
-  const floorOccupancyRef = rtdb.ref(`${MQTT_TOPICS.OCCUPANCY}/${floor}`);
-  const snapshot = await floorOccupancyRef.get();
-  const currentData = snapshot.exists()
-    ? (snapshot.val() as Partial<FloorOccupancy>)
-    : null;
+): Promise<FloorOccupancy> {
+  const overview = await getDashboardOverviewOrEmpty();
+  const currentData = (overview.occupancy?.[floor] as Partial<FloorOccupancy>) ?? null;
   const currentOccupancy = currentData?.occupancy ?? 0;
   const occupancy = nextOccupancyValue(currentOccupancy, movement);
 
-  await floorOccupancyRef.set({ floor, occupancy } as FloorOccupancy);
+  const payload = { floor, occupancy } as FloorOccupancy;
+  return payload;
 }
 
-async function saveTotalOccupancy(movement: number): Promise<void> {
-  const baseRef = rtdb.ref(MQTT_TOPICS.OCCUPANCY);
-  const snapshot = await baseRef.get();
-  const currentData = snapshot.exists()
-    ? (snapshot.val() as Partial<StoredOccupancy>)
-    : null;
-  const currentOccupancy = currentData?.total_occupancy ?? 0;
-  const total_occupancy = nextOccupancyValue(currentOccupancy, movement);
+async function saveTotalOccupancy(movement: number): Promise<StoredOccupancy> {
+  const overview = await getDashboardOverviewOrEmpty();
+  const currentData =
+    (overview.occupancy?.summary as Partial<StoredOccupancy>) ?? null;
+  const currentOccupancy = currentData?.occupancy ?? 0;
+  const occupancy = nextOccupancyValue(currentOccupancy, movement);
 
-  await baseRef.set({ total_occupancy } as StoredOccupancy);
+  const payload = { occupancy } as StoredOccupancy;
+  return payload;
+}
+
+export async function applyOccupancyDelta(
+  floor: string,
+  movement: number,
+): Promise<{
+  floor: FloorOccupancy;
+  summary: StoredOccupancy;
+}> {
+  const [floorPayload, summaryPayload] = await Promise.all([
+    saveFloorOccupancy(floor, movement),
+    saveTotalOccupancy(movement),
+  ]);
+
+  return {
+    floor: floorPayload,
+    summary: summaryPayload,
+  };
 }
 
 export async function handleOccupancy(topic: string, data: Occupancy) {
@@ -81,7 +100,11 @@ export async function handleOccupancy(topic: string, data: Occupancy) {
 
   try {
     if (floor) {
-      await saveFloorOccupancy(floor, movement);
+      const next = await applyOccupancyDelta(floor, movement);
+      await Promise.all([
+        patchDashboardOverviewBranch('occupancy', [floor], next.floor),
+        patchDashboardOverviewBranch('occupancy', ['summary'], next.summary),
+      ]);
       logger.info('Successfully saved floor occupancy', {
         topic,
         floor,
@@ -90,7 +113,8 @@ export async function handleOccupancy(topic: string, data: Occupancy) {
       return;
     }
 
-    await saveTotalOccupancy(movement);
+    const summary = await saveTotalOccupancy(movement);
+    await patchDashboardOverviewBranch('occupancy', ['summary'], summary);
     logger.info('Successfully saved total occupancy', { topic, movement });
   } catch (error) {
     logger.error('Failed to save occupancy', {

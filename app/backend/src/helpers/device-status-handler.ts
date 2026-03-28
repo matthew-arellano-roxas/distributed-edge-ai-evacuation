@@ -1,54 +1,93 @@
 import type { MqttClient } from 'mqtt';
 import { logger } from '@root/config';
-import { rtdb } from '@root/config/firebase';
 import { MQTT_TOPICS } from './mqtt-topics';
+import { patchDashboardOverviewBranch } from '@/services/dashboard-state-service';
 import type {
-  DeviceStatusFirebaseRecord,
+  DeviceStatusRecord,
   DeviceStatusMqttPayload,
 } from '@/types/device-status.types';
 
 function parseDeviceStatusTopic(topic: string) {
-  const [, , floor, deviceId] = topic.split('/');
-  return { floor, deviceId };
+  const [, floor] = topic.split('/');
+  return { floor };
+}
+
+function isDeviceStatusTopic(topic: string): boolean {
+  return /^building\/[^/]+\/devices$/.test(topic);
+}
+
+function omitUndefined<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as T;
 }
 
 export async function handleDeviceStatus(
   topic: string,
   data: DeviceStatusMqttPayload,
 ): Promise<void> {
-  if (!topic.includes(MQTT_TOPICS.DEVICE_STATUS)) {
+  if (!isDeviceStatusTopic(topic)) {
     return;
   }
 
-  const { floor, deviceId: topicDeviceId } = parseDeviceStatusTopic(topic);
-  const deviceId = String(data.deviceId ?? topicDeviceId ?? '').trim();
+  logger.info('Handling device status payload', { topic, data });
+
+  const { floor } = parseDeviceStatusTopic(topic);
+  const deviceId = String(data.deviceId ?? data.deviceName ?? '').trim();
 
   if (!deviceId) {
     logger.warn('Skipping device status without deviceId', { topic, data });
     return;
   }
 
-  const ref = rtdb.ref(`${MQTT_TOPICS.DEVICE_STATUS}/${deviceId}`);
+  const floorKey = String(data.floor ?? floor ?? '').trim();
+  if (!floorKey) {
+    logger.warn('Skipping device status without floor', {
+      topic,
+      data,
+      deviceId,
+    });
+    return;
+  }
+
   const now = Date.now();
-  const payload: DeviceStatusFirebaseRecord = {
+  const payload = omitUndefined<DeviceStatusRecord>({
     ...data,
     deviceId,
-    floor,
-    heartbeat: typeof data.heartbeat === 'number' ? data.heartbeat : now,
+    floor: floorKey,
+    heartbeat: typeof data.heartbeat === 'number' ? data.heartbeat : undefined,
     lastSeen: now,
-  };
+  });
 
   try {
-    await ref.set(payload);
-    logger.info('Successfully saved device status', { topic, deviceId });
+    await Promise.all([
+      patchDashboardOverviewBranch('devices', [floorKey, deviceId], payload),
+      patchDashboardOverviewBranch('latestDevices', [deviceId], payload),
+    ]);
+    logger.info('Successfully saved latest device status', {
+      topic,
+      deviceId,
+      floor: floorKey,
+      payload,
+    });
   } catch (error) {
+    await Promise.all([
+      patchDashboardOverviewBranch('devices', [floorKey, deviceId], payload),
+      patchDashboardOverviewBranch('latestDevices', [deviceId], payload),
+    ]);
     logger.error('Failed to save device status', {
       error: error instanceof Error ? error.message : String(error),
       topic,
+      deviceId,
+      floor: floorKey,
+      payload,
     });
   }
 }
 
 export function subscribeToDeviceStatus(client: MqttClient): void {
-  client.subscribe(`${MQTT_TOPICS.DEVICE_STATUS}/#`);
+  client.subscribe(`building/+${MQTT_TOPICS.DEVICE_STATUS_SUFFIX}`);
+  logger.info('Subscribed to device status topics', {
+    topic: `building/+${MQTT_TOPICS.DEVICE_STATUS_SUFFIX}`,
+  });
 }
