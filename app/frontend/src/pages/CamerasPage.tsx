@@ -1,8 +1,7 @@
-import LaunchRoundedIcon from '@mui/icons-material/LaunchRounded';
 import VideocamRoundedIcon from '@mui/icons-material/VideocamRounded';
 import {
   Alert,
-  Button,
+  Box,
   Card,
   CardContent,
   Grid,
@@ -16,21 +15,31 @@ type CameraConfig = {
   url: string;
 };
 
+function normalizeUrl(url: string): string {
+  const value = url.trim();
+  if (!value) return '';
+  try {
+    return new URL(value).toString();
+  } catch {
+    return new URL(`http://${value}`).toString();
+  }
+}
+
 const cameraConfigs: CameraConfig[] = [
   {
     id: 'pi5-cam-1',
     label: 'Raspberry Pi 5 Camera 1',
-    url: import.meta.env.VITE_CAMERA_PI5_CAM1_HLS_URL ?? '',
+    url: normalizeUrl(import.meta.env.VITE_CAMERA_PI5_CAM1_HLS_URL ?? ''),
   },
   {
     id: 'pi5-cam-2',
     label: 'Raspberry Pi 5 Camera 2',
-    url: import.meta.env.VITE_CAMERA_PI5_CAM2_HLS_URL ?? '',
+    url: normalizeUrl(import.meta.env.VITE_CAMERA_PI5_CAM2_HLS_URL ?? ''),
   },
   {
     id: 'pizero-cam-1',
     label: 'Raspberry Pi Zero Camera 1',
-    url: import.meta.env.VITE_CAMERA_PIZERO_CAM1_HLS_URL ?? '',
+    url: normalizeUrl(import.meta.env.VITE_CAMERA_PIZERO_CAM1_HLS_URL ?? ''),
   },
 ];
 
@@ -41,9 +50,10 @@ export function CamerasPage() {
         <Typography variant="overline" color="secondary.main">
           Cameras
         </Typography>
-        <Typography variant="h4">Quick access to stream endpoints</Typography>
+        <Typography variant="h4">Live camera streams</Typography>
         <Typography color="text.secondary" sx={{ maxWidth: 680 }}>
-          Compact cards for stream status and links, with wrapping that stays inside the layout.
+          Each configured camera is embedded directly here so you can monitor streams without
+          leaving the dashboard.
         </Typography>
       </Stack>
 
@@ -76,15 +86,30 @@ export function CamerasPage() {
                     </Typography>
 
                     {configured ? (
-                      <Button
-                        variant="contained"
-                        endIcon={<LaunchRoundedIcon />}
-                        href={camera.url}
-                        target="_blank"
-                        rel="noreferrer"
+                      <Box
+                        sx={{
+                          borderRadius: 2,
+                          overflow: 'hidden',
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          bgcolor: 'common.black',
+                          aspectRatio: '16 / 9',
+                        }}
                       >
-                        Open stream
-                      </Button>
+                        <Box
+                          component="img"
+                          alt={camera.label}
+                          src={camera.url}
+                          sx={{
+                            width: '100%',
+                            height: '100%',
+                            border: 0,
+                            display: 'block',
+                            objectFit: 'cover',
+                            bgcolor: 'common.black',
+                          }}
+                        />
+                      </Box>
                     ) : null}
                   </Stack>
                 </CardContent>
