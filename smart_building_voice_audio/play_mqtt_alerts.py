@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import shutil
 import subprocess
 import sys
@@ -39,6 +40,9 @@ MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 MQTT_ANNOUNCEMENT_TOPIC = os.getenv("MQTT_ANNOUNCEMENT_TOPIC", "building/evacuation/alerts")
 MQTT_EVACUATION_TOPIC = os.getenv("MQTT_EVACUATION_TOPIC", "building/command/evacuation")
 MQTT_CLIENT_ID = os.getenv("MQTT_ALERT_AUDIO_CLIENT_ID", "mqtt-alert-audio-player")
+MQTT_KEEPALIVE_SECONDS = int(os.getenv("MQTT_KEEPALIVE_SECONDS", "60"))
+MQTT_RECONNECT_MIN_DELAY_SECONDS = int(os.getenv("MQTT_RECONNECT_MIN_DELAY_SECONDS", "1"))
+MQTT_RECONNECT_MAX_DELAY_SECONDS = int(os.getenv("MQTT_RECONNECT_MAX_DELAY_SECONDS", "30"))
 ALERT_COOLDOWN_SECONDS = float(os.getenv("ALERT_COOLDOWN_SECONDS", "8"))
 AUDIO_PLAYER = os.getenv("AUDIO_PLAYER", "").strip().lower()
 IGNORE_RETAINED_MESSAGES = os.getenv("IGNORE_RETAINED_MESSAGES", "true").strip().lower() in {
@@ -57,6 +61,13 @@ TEMPERATURE_MP3 = AUDIO_DIR / "temperature_rising_voice_line.mp3"
 SMOKE_MP3 = AUDIO_DIR / "smoke_voice_line.mp3"
 
 _last_played_at = {}
+
+
+def _build_client_id():
+    configured = MQTT_CLIENT_ID.strip()
+    if configured:
+        return configured
+    return f"mqtt-alert-audio-player-{socket.gethostname()}"
 
 
 def _normalize_floor(value):
@@ -202,11 +213,29 @@ def _on_connect(client, userdata, flags, rc, properties=None):
         print(f"[AUDIO] MQTT connection failed with rc={rc}", file=sys.stderr)
         return
 
-    client.subscribe(MQTT_ANNOUNCEMENT_TOPIC)
-    client.subscribe(MQTT_EVACUATION_TOPIC)
+    subscriptions = [
+        (MQTT_ANNOUNCEMENT_TOPIC, 0),
+        (MQTT_EVACUATION_TOPIC, 0),
+    ]
+    result, _mid = client.subscribe(subscriptions)
+    if result != mqtt.MQTT_ERR_SUCCESS:
+        print(f"[AUDIO] MQTT subscribe failed with rc={result}", file=sys.stderr)
+        return
+
     print(
         f"[AUDIO] Subscribed to {MQTT_ANNOUNCEMENT_TOPIC} and {MQTT_EVACUATION_TOPIC} "
         f"at {MQTT_HOST}:{MQTT_PORT}"
+    )
+
+
+def _on_disconnect(client, userdata, disconnect_flags=None, rc=0, properties=None):
+    if rc == 0:
+        print("[AUDIO] MQTT disconnected cleanly")
+        return
+
+    print(
+        f"[AUDIO] MQTT disconnected unexpectedly with rc={rc}. Waiting for reconnect...",
+        file=sys.stderr,
     )
 
 
@@ -247,22 +276,31 @@ def main():
     if mqtt is None:
         raise RuntimeError("paho-mqtt is not installed. Run: python -m pip install paho-mqtt")
 
+    client_id = _build_client_id()
     if hasattr(mqtt, "CallbackAPIVersion"):
         client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
-            client_id=MQTT_CLIENT_ID,
+            client_id=client_id,
         )
     else:
-        client = mqtt.Client(client_id=MQTT_CLIENT_ID)
+        client = mqtt.Client(client_id=client_id)
 
     if MQTT_USERNAME:
         client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
+    client.reconnect_delay_set(
+        min_delay=MQTT_RECONNECT_MIN_DELAY_SECONDS,
+        max_delay=MQTT_RECONNECT_MAX_DELAY_SECONDS,
+    )
     client.on_connect = _on_connect
+    client.on_disconnect = _on_disconnect
     client.on_message = _on_message
 
-    print(f"[AUDIO] Connecting to MQTT broker at {MQTT_HOST}:{MQTT_PORT} ...")
-    client.connect(MQTT_HOST, MQTT_PORT, keepalive=30)
+    print(
+        f"[AUDIO] Connecting to MQTT broker at {MQTT_HOST}:{MQTT_PORT} "
+        f"with client id '{client_id}' ..."
+    )
+    client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=MQTT_KEEPALIVE_SECONDS)
     client.loop_forever()
 
 
