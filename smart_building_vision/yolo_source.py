@@ -4,9 +4,20 @@ import sys
 import cv2
 
 
-def parse_source(source):
-    if source.startswith("usb"):
-        return "usb", int(source[3:])
+def parse_source(source: str):
+    source = source.strip()
+
+    if source.startswith("usb") and source[3:].isdigit():
+        return "camera", int(source[3:])
+
+    if source.isdigit():
+        return "camera", int(source)
+
+    if source.startswith("/dev/video"):
+        return "camera", source
+
+    if source.startswith(("rtsp://", "rtmp://", "http://", "https://")):
+        return "stream", source
 
     if os.path.isfile(source):
         _, ext = os.path.splitext(source)
@@ -20,6 +31,7 @@ def parse_source(source):
     sys.exit(1)
 
 
+
 def open_source(source_type, source_value, user_res):
     if source_type == "image":
         frame = cv2.imread(source_value)
@@ -28,9 +40,10 @@ def open_source(source_type, source_value, user_res):
             sys.exit(1)
         return None, frame
 
+    # camera / stream / video all use VideoCapture
     cap = cv2.VideoCapture(source_value)
     if not cap.isOpened():
-        print("Unable to open the webcam/video source.")
+        print(f"Unable to open source: {source_value}")
         sys.exit(1)
 
     if user_res:
@@ -39,7 +52,6 @@ def open_source(source_type, source_value, user_res):
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, res_h)
 
     return cap, None
-
 
 def read_frame(source_type, cap, single_image_frame):
     if source_type == "image":

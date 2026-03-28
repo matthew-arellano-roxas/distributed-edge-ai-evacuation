@@ -25,4 +25,10 @@ def parse_args():
         action="store_true",
         help='Record webcam/video output to "demo1.avi". Requires --resolution.',
     )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=5432,
+        help="Flask server port.",
+    )
     return parser.parse_args()
