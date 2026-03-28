@@ -1,7 +1,6 @@
 import json
 import os
 import queue
-import socket
 import shutil
 import subprocess
 import sys
@@ -41,8 +40,6 @@ MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 MQTT_ANNOUNCEMENT_TOPIC = os.getenv("MQTT_ANNOUNCEMENT_TOPIC", "building/evacuation/alerts")
 MQTT_EVACUATION_TOPIC = os.getenv("MQTT_EVACUATION_TOPIC", "building/command/evacuation")
-MQTT_CLIENT_ID = os.getenv("MQTT_ALERT_AUDIO_CLIENT_ID", "mqtt-alert-audio-player")
-MQTT_EXACT_CLIENT_ID = os.getenv("MQTT_ALERT_AUDIO_EXACT_CLIENT_ID", "").strip()
 MQTT_KEEPALIVE_SECONDS = int(os.getenv("MQTT_KEEPALIVE_SECONDS", "60"))
 MQTT_RECONNECT_MIN_DELAY_SECONDS = int(os.getenv("MQTT_RECONNECT_MIN_DELAY_SECONDS", "1"))
 MQTT_RECONNECT_MAX_DELAY_SECONDS = int(os.getenv("MQTT_RECONNECT_MAX_DELAY_SECONDS", "30"))
@@ -72,14 +69,6 @@ def _clean_env_value(value, default=""):
         return default
     cleaned = str(value).strip().strip('"').strip("'")
     return cleaned if cleaned else default
-
-
-def _build_client_id():
-    if MQTT_EXACT_CLIENT_ID:
-        return MQTT_EXACT_CLIENT_ID
-
-    configured = MQTT_CLIENT_ID.strip() or "mqtt-alert-audio-player"
-    return f"{configured}-{socket.gethostname()}"
 
 
 def _normalize_floor(value):
@@ -315,15 +304,13 @@ def main():
     playback_thread = threading.Thread(target=_playback_worker, daemon=True)
     playback_thread.start()
 
-    client_id = _build_client_id()
     if hasattr(mqtt, "CallbackAPIVersion"):
         client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
-            client_id=client_id,
             clean_session=True,
         )
     else:
-        client = mqtt.Client(client_id=client_id, clean_session=True)
+        client = mqtt.Client(clean_session=True)
 
     if MQTT_USERNAME:
         client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
@@ -337,14 +324,10 @@ def main():
     client.on_message = _on_message
 
     print(
-        f"[AUDIO] Connecting to MQTT broker at {mqtt_host}:{mqtt_port} "
-        f"with client id '{client_id}' ..."
+        f"[AUDIO] Connecting to MQTT broker at {mqtt_host}:{mqtt_port} ..."
     )
-    client.connect_async(mqtt_host, mqtt_port, keepalive=MQTT_KEEPALIVE_SECONDS)
-    try:
-        client.loop_forever(retry_first_connection=True)
-    except TypeError:
-        client.loop_forever()
+    client.connect(mqtt_host, mqtt_port, keepalive=MQTT_KEEPALIVE_SECONDS)
+    client.loop_forever()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,17 @@
+[0;1;32m●[0m voice-assist.service - Smart Building Voice MQTT Listener
+     Loaded: loaded (]8;;file://main-pi/home/rasp5/.config/systemd/user/voice-assist.service\/home/rasp5/.config/systemd/user/voice-assist.service]8;;\; [0;1;32menabled[0m; preset: [0;1;32menabled[0m)
+     Active: [0;1;32mactive (running)[0m since Sun 2026-03-29 02:43:59 PST; 22s ago
+ Invocation: 3494a2be86ad40a287fa1516efeea5c9
+   Main PID: 117564 (python)
+      Tasks: 2[0;38;5;245m (limit: 9575)[0m
+        CPU: 141ms
+     CGroup: /user.slice/user-1000.slice/user@1000.service/app.slice/voice-assist.service
+             └─[0;38;5;245m117564 /home/rasp5/distributed-edge-ai-evacuation/smart_building_voice_audio/venv/bin/python /home/rasp5/distributed-edge-ai-evacuation/smart_building_voice_audio/play_mqtt_alerts.py[0m
+
+Mar 29 02:43:59 main-pi systemd[1307]: Started voice-assist.service - Smart Building Voice MQTT Listener.
+Mar 29 02:43:59 main-pi bash[117564]: [voice-assist] Starting MQTT voice alerts...
+Mar 29 02:43:59 main-pi bash[117564]: [voice-assist] Using script: /home/rasp5/distributed-edge-ai-evacuation/smart_building_voice_audio/play_mqtt_alerts.py
+Mar 29 02:43:59 main-pi bash[117564]: [voice-assist] Using env: /home/rasp5/distributed-edge-ai-evacuation/smart_building_voice_audio/.env
+Mar 29 02:43:59 main-pi bash[117564]: [AUDIO] Connecting to MQTT broker at 192.168.9.107:1883 ...
+Mar 29 02:43:59 main-pi bash[117564]: [AUDIO] Subscribed to building/evacuation/alerts and building/command/evacuation at 192.168.9.107:1883
+Mar 29 02:43:59 main-pi bash[117564]: [AUDIO] Ignoring retained message on building/command/evacuation

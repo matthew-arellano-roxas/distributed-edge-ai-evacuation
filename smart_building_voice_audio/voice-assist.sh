@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-VENV_DIR="${PROJECT_ROOT}/venv"
+VENV_DIR="${PROJECT_ROOT}/smart_building_voice_audio/venv"
 PYTHON_BIN="${VENV_DIR}/bin/python"
 ENV_FILE="${SCRIPT_DIR}/.env"
 TARGET_SCRIPT="${SCRIPT_DIR}/play_mqtt_alerts.py"
