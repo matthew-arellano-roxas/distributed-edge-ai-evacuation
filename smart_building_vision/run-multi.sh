@@ -1,4 +1,5 @@
 #!/bin/bash
+sleep 5
 
 BASE_DIR="/home/rasp5/distributed-edge-ai-evacuation/smart_building_vision"
 PYTHON="$BASE_DIR/venv/bin/python"
